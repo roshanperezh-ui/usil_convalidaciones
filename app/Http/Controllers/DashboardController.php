@@ -1,0 +1,178 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Convalidacion;
+use App\Models\PostulanteDestino;
+use App\Models\Role;
+use App\Models\Simulacion;
+use App\Models\User;
+use App\Services\AlcanceService;
+use Illuminate\Http\Request;
+
+/**
+ * Panel dinámico según el rol autenticado. Cada perfil ve sus KPIs, su bandeja
+ * de pendientes y sus acciones rápidas, siempre dentro de su alcance de datos.
+ */
+class DashboardController extends Controller
+{
+    public function index(Request $request)
+    {
+        $user = $request->user();
+        $rol  = $user->rol?->nombre;
+
+        // Base de destinos dentro del alcance del usuario.
+        $visibles = AlcanceService::carrerasVisibles($user);
+        $destinos = PostulanteDestino::query()
+            ->when($visibles !== null, fn ($q) => $q->whereIn('carrera_id', $visibles ?: [0]));
+
+        $porEstado = (clone $destinos)->selectRaw('estado_equivalencias, COUNT(*) t')
+            ->groupBy('estado_equivalencias')->pluck('t', 'estado_equivalencias');
+        $c = fn ($e) => (int) ($porEstado[$e] ?? 0);
+        $totalDestinos = (int) $porEstado->sum();
+
+        return inertia('Dashboard', [
+            'dashboard' => [
+                'rol'      => $rol,
+                'saludo'   => $this->saludo($user),
+                'kpis'     => $this->kpis($user, $rol, $c, $totalDestinos, $visibles),
+                'bandeja'  => $this->bandeja($destinos, $rol),
+                'acciones' => $this->acciones($user),
+            ],
+        ]);
+    }
+
+    private function saludo(User $user): string
+    {
+        return "Hola, {$user->nombre}";
+    }
+
+    /** KPIs específicos por perfil. */
+    private function kpis(User $user, ?string $rol, callable $c, int $total, ?array $visibles): array
+    {
+        $pendientesAsignar = $c('pendiente');
+        $enEvaluacion = $c('asignada') + $c('en_revision') + $c('observada') + $c('devuelta');
+        $aprobadas = $c('aprobada');
+        $tasa = $total ? round($aprobadas / $total * 100) : 0;
+
+        $sims = $this->simsScoped($visibles);
+        $convs = $this->convsScoped($visibles);
+
+        switch ($rol) {
+            case Role::SERVICIOS:
+                return [
+                    ['label' => 'Solicitudes recibidas', 'valor' => $total, 'color' => 'blue'],
+                    ['label' => 'Pendientes de asignación', 'valor' => $pendientesAsignar, 'color' => 'amber'],
+                    ['label' => 'En evaluación', 'valor' => $enEvaluacion, 'color' => 'indigo'],
+                    ['label' => 'Finalizadas', 'valor' => $aprobadas, 'color' => 'green'],
+                ];
+
+            case Role::COORDINADOR:
+                $asignadasAmi = (clone $this->destinosDe($visibles))->where('asignado_a_id', $user->id)->count();
+                return [
+                    ['label' => 'Solicitudes asignadas', 'valor' => $asignadasAmi, 'color' => 'blue'],
+                    ['label' => 'Evaluaciones pendientes', 'valor' => $enEvaluacion, 'color' => 'amber'],
+                    ['label' => 'Aprobadas', 'valor' => $aprobadas, 'color' => 'green'],
+                    ['label' => 'Simulaciones generadas', 'valor' => $sims, 'color' => 'violet'],
+                ];
+
+            case Role::DIRECTOR:
+                return [
+                    ['label' => 'Solicitudes (mis carreras)', 'valor' => $total, 'color' => 'blue'],
+                    ['label' => 'Pendientes de aprobación', 'valor' => $c('en_revision'), 'color' => 'amber'],
+                    ['label' => 'Aprobadas', 'valor' => $aprobadas, 'color' => 'green'],
+                    ['label' => 'Observadas / devueltas', 'valor' => $c('observada') + $c('devuelta'), 'color' => 'orange'],
+                ];
+
+            case Role::DECANO:
+                return [
+                    ['label' => 'Solicitudes (facultad)', 'valor' => $total, 'color' => 'blue'],
+                    ['label' => 'Aprobadas', 'valor' => $aprobadas, 'color' => 'green'],
+                    ['label' => 'Convalidaciones confirmadas', 'valor' => $convs, 'color' => 'indigo'],
+                    ['label' => 'Tasa de aprobación', 'valor' => $tasa . '%', 'color' => 'violet'],
+                ];
+
+            case Role::AUDITOR:
+                return [
+                    ['label' => 'Expedientes', 'valor' => $total, 'color' => 'blue'],
+                    ['label' => 'En proceso', 'valor' => $enEvaluacion, 'color' => 'amber'],
+                    ['label' => 'Aprobados', 'valor' => $aprobadas, 'color' => 'green'],
+                    ['label' => 'Usuarios activos', 'valor' => User::where('activo', true)->count(), 'color' => 'slate'],
+                ];
+
+            case Role::CONSULTA:
+                return [
+                    ['label' => 'Solicitudes totales', 'valor' => $total, 'color' => 'blue'],
+                    ['label' => 'En proceso', 'valor' => $enEvaluacion, 'color' => 'amber'],
+                    ['label' => 'Aprobadas', 'valor' => $aprobadas, 'color' => 'green'],
+                    ['label' => 'Tasa de aprobación', 'valor' => $tasa . '%', 'color' => 'violet'],
+                ];
+
+            default: // Superusuario
+                return [
+                    ['label' => 'Usuarios activos', 'valor' => User::where('activo', true)->count(), 'color' => 'blue'],
+                    ['label' => 'Solicitudes totales', 'valor' => $total, 'color' => 'indigo'],
+                    ['label' => 'En proceso', 'valor' => $enEvaluacion, 'color' => 'amber'],
+                    ['label' => 'Aprobadas', 'valor' => $aprobadas, 'color' => 'green'],
+                    ['label' => 'Simulaciones', 'valor' => $sims, 'color' => 'violet'],
+                    ['label' => 'Convalidaciones', 'valor' => $convs, 'color' => 'teal'],
+                ];
+        }
+    }
+
+    /** Bandeja de pendientes (hasta 6) relevante al rol. */
+    private function bandeja($destinos, ?string $rol): array
+    {
+        $q = (clone $destinos)->with(['postulante:id,nombres,apellido_paterno,apellido_materno', 'carrera:id,nombre']);
+
+        // Servicios ve lo no asignado; el resto ve lo que aún no está aprobado.
+        $q = $rol === Role::SERVICIOS
+            ? $q->where('estado_equivalencias', 'pendiente')
+            : $q->where('estado_equivalencias', '!=', 'aprobada');
+
+        return $q->orderByDesc('id')->limit(6)->get()->map(fn (PostulanteDestino $d) => [
+            'titulo'    => $d->postulante
+                ? trim("{$d->postulante->apellido_paterno} {$d->postulante->apellido_materno}, {$d->postulante->nombres}")
+                : '—',
+            'subtitulo' => $d->carrera?->nombre,
+            'estado'    => $d->estado_equivalencias,
+        ])->all();
+    }
+
+    /** Acciones rápidas según permisos. */
+    private function acciones(User $user): array
+    {
+        $posibles = [
+            ['label' => 'Solicitudes', 'href' => '/postulantes', 'permiso' => 'solicitudes.ver'],
+            ['label' => 'Equivalencias', 'href' => '/equivalencias', 'permiso' => 'evaluacion.ver'],
+            ['label' => 'Simulaciones', 'href' => '/simulaciones', 'permiso' => 'evaluacion.ver'],
+            ['label' => 'Convalidaciones', 'href' => '/convalidaciones', 'permiso' => 'convalidacion.ver'],
+            ['label' => 'Reportes', 'href' => '/reportes', 'permiso' => 'reportes.ver'],
+            ['label' => 'Usuarios', 'href' => '/usuarios', 'permiso' => 'usuarios.gestionar'],
+            ['label' => 'Configuración', 'href' => '/configuracion', 'permiso' => 'configuracion.gestionar'],
+        ];
+
+        return array_values(array_filter($posibles, fn ($a) => $user->puede($a['permiso'])));
+    }
+
+    private function destinosDe(?array $visibles)
+    {
+        return PostulanteDestino::query()
+            ->when($visibles !== null, fn ($q) => $q->whereIn('carrera_id', $visibles ?: [0]));
+    }
+
+    private function simsScoped(?array $visibles): int
+    {
+        return Simulacion::query()
+            ->when($visibles !== null, fn ($q) => $q->whereIn('carrera_usil_id', $visibles ?: [0]))
+            ->count();
+    }
+
+    private function convsScoped(?array $visibles): int
+    {
+        return Convalidacion::query()
+            ->when($visibles !== null, fn ($q) => $q->whereHas('simulacion',
+                fn ($s) => $s->whereIn('carrera_usil_id', $visibles ?: [0])))
+            ->count();
+    }
+}

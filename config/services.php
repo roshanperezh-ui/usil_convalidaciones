@@ -1,0 +1,55 @@
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Third Party Services
+    |--------------------------------------------------------------------------
+    |
+    | This file is for storing the credentials for third party services such
+    | as Mailgun, Postmark, AWS and more. This file provides the de facto
+    | location for this type of information, allowing packages to have
+    | a conventional file to locate the various service credentials.
+    |
+    */
+
+    'postmark' => [
+        'token' => env('POSTMARK_TOKEN'),
+    ],
+
+    'ses' => [
+        'key' => env('AWS_ACCESS_KEY_ID'),
+        'secret' => env('AWS_SECRET_ACCESS_KEY'),
+        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+    ],
+
+    'resend' => [
+        'key' => env('RESEND_KEY'),
+    ],
+
+    'slack' => [
+        'notifications' => [
+            'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
+            'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
+        ],
+    ],
+
+    // Asistente de IA (RF-43) — la clave se lee de entorno (RNF-09).
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL', 'gpt-4o'),
+    ],
+
+    // Motor de convalidación con IA. Proveedor por defecto: Google Gemini (gratis).
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+    ],
+    'ia' => [
+        'proveedor' => env('IA_PROVEEDOR', 'gemini'), // gemini | openai
+        // CA bundle para verificar TLS (soluciona cURL error 60 en entornos sin CA).
+        'ca_bundle' => env('CURL_CA_BUNDLE', storage_path('certs/cacert.pem')),
+    ],
+
+];

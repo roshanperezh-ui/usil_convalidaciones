@@ -1,0 +1,1276 @@
+{
+ "Ingeniería de Sistemas de Información": {
+  "obligatorios": [
+   {
+    "ciclo": 1,
+    "curso": "Fundamentos de programación",
+    "cr": 3,
+    "th": 5,
+    "prereq": []
+   },
+   {
+    "ciclo": 1,
+    "curso": "Fundamentos en competencias digitales",
+    "cr": 3,
+    "th": 5,
+    "prereq": []
+   },
+   {
+    "ciclo": 1,
+    "curso": "Matemática",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Nivelación en Matemática"
+    ]
+   },
+   {
+    "ciclo": 1,
+    "curso": "Lenguaje y comunicación I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Nivelación en Lenguaje"
+    ]
+   },
+   {
+    "ciclo": 1,
+    "curso": "Realidad nacional y globalización",
+    "cr": 3,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 1,
+    "curso": "English I",
+    "cr": 5,
+    "th": 8,
+    "prereq": [
+     "Nivelación en Inglés"
+    ]
+   },
+   {
+    "ciclo": 2,
+    "curso": "Programación orientada a objetos I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Fundamentos de programación"
+    ]
+   },
+   {
+    "ciclo": 2,
+    "curso": "Matemática discreta",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Matemática"
+    ]
+   },
+   {
+    "ciclo": 2,
+    "curso": "Cálculo de una variable",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Matemática"
+    ]
+   },
+   {
+    "ciclo": 2,
+    "curso": "Lenguaje y comunicación II",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Lenguaje y comunicación I"
+    ]
+   },
+   {
+    "ciclo": 2,
+    "curso": "Administración para los negocios",
+    "cr": 3,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 2,
+    "curso": "English II",
+    "cr": 5,
+    "th": 8,
+    "prereq": [
+     "English I"
+    ]
+   },
+   {
+    "ciclo": 3,
+    "curso": "Programación y estructuras de datos",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Fundamentos de programación"
+    ]
+   },
+   {
+    "ciclo": 3,
+    "curso": "Gestión de procesos",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 3,
+    "curso": "Álgebra lineal computacional",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Matemática"
+    ]
+   },
+   {
+    "ciclo": 3,
+    "curso": "Electricidad y ondas",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Cálculo de una variable"
+    ]
+   },
+   {
+    "ciclo": 3,
+    "curso": "Principios de economía",
+    "cr": 3,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 3,
+    "curso": "English III",
+    "cr": 5,
+    "th": 8,
+    "prereq": [
+     "English II"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "Análisis y diseño de sistemas I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Gestión de procesos"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "Gerenciamiento de datos I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Programación y estructuras de datos"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "Arquitectura de computadoras",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Electricidad y ondas"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "Estadística descriptiva e inferencia estadística",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Matemática"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "Fundamentos contables y financieros",
+    "cr": 3,
+    "th": 4,
+    "prereq": [
+     "Principios de economía"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "English IV",
+    "cr": 5,
+    "th": 8,
+    "prereq": [
+     "English III"
+    ]
+   },
+   {
+    "ciclo": 5,
+    "curso": "Programación orientada a objetos II",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Programación orientada a objetos I"
+    ]
+   },
+   {
+    "ciclo": 5,
+    "curso": "Gerenciamiento de datos II",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Gerenciamiento de datos I"
+    ]
+   },
+   {
+    "ciclo": 5,
+    "curso": "Arquitectura empresarial",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Gestión de procesos"
+    ]
+   },
+   {
+    "ciclo": 5,
+    "curso": "Interacción humano computador",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 5,
+    "curso": "Ética y ciudadanía",
+    "cr": 3,
+    "th": 3,
+    "prereq": [
+     "Realidad nacional y globalización"
+    ]
+   },
+   {
+    "ciclo": 5,
+    "curso": "Marketing",
+    "cr": 3,
+    "th": 3,
+    "prereq": [
+     "Administración para los negocios"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Análisis y diseño de sistemas II",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Análisis y diseño de sistemas I"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Gobierno de datos",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Gerenciamiento de datos II"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Gobierno de TI",
+    "cr": 2,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 6,
+    "curso": "Sistemas operativos",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Arquitectura empresarial"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Metodología de la investigación científica",
+    "cr": 4,
+    "th": 4,
+    "prereq": [
+     "Estadística descriptiva e inferencia estadística"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Electivo 1",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Arquitectura de computadoras"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Desarrollo basado en plataformas",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Programación orientada a objetos II"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Gestión de sistemas de información",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Gobierno de TI"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Gestión del conocimiento",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Gobierno de datos"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Redes y telecomunicaciones I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Sistemas operativos"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Fundamentos del liderazgo sostenible",
+    "cr": 3,
+    "th": 4,
+    "prereq": [
+     "Ética y ciudadanía"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Electivo 2",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 8,
+    "curso": "Agentes inteligentes",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Programación orientada a objetos II"
+    ]
+   },
+   {
+    "ciclo": 8,
+    "curso": "Seguridad de la información",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Gobierno de datos"
+    ]
+   },
+   {
+    "ciclo": 8,
+    "curso": "Gestión de proyectos para computación",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Metodología de la investigación científica"
+    ]
+   },
+   {
+    "ciclo": 8,
+    "curso": "Cloud computing",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Redes y telecomunicaciones I"
+    ]
+   },
+   {
+    "ciclo": 8,
+    "curso": "Oportunidades de negocios",
+    "cr": 3,
+    "th": 3,
+    "prereq": [
+     "Fundamentos contables y financieros",
+     "Marketing",
+     "Principios de economía"
+    ]
+   },
+   {
+    "ciclo": 8,
+    "curso": "Electivo 3",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 9,
+    "curso": "Internet of things",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Arquitectura de computadoras"
+    ]
+   },
+   {
+    "ciclo": 9,
+    "curso": "Visualización de datos",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Desarrollo basado en plataformas"
+    ]
+   },
+   {
+    "ciclo": 9,
+    "curso": "Proyecto para computación I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Gestión de proyectos para computación"
+    ]
+   },
+   {
+    "ciclo": 9,
+    "curso": "Tecnologías emergentes",
+    "cr": 2,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 9,
+    "curso": "Computación en la sociedad",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Cloud computing"
+    ]
+   },
+   {
+    "ciclo": 9,
+    "curso": "Electivo 4",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 10,
+    "curso": "Big data y analítica de datos",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Cloud computing"
+    ]
+   },
+   {
+    "ciclo": 10,
+    "curso": "Estrategias de sistemas de información",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 10,
+    "curso": "Proyecto para computación II",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Proyecto para computación I"
+    ]
+   },
+   {
+    "ciclo": 10,
+    "curso": "Emprendimiento e innovación tecnológica",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Gestión de proyectos para computación"
+    ]
+   },
+   {
+    "ciclo": 10,
+    "curso": "Desarrollo de negocios electrónicos",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Tecnologías emergentes"
+    ]
+   },
+   {
+    "ciclo": 10,
+    "curso": "Electivo 5",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   }
+  ],
+  "electivos": {
+   "Analítica de datos no estructurados": [
+    {
+     "ciclo": 6,
+     "curso": "Procesamiento digital de señales",
+     "cr": 4,
+     "th": 6,
+     "prereq": []
+    },
+    {
+     "ciclo": 7,
+     "curso": "Procesamiento de imágenes digitales",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Procesamiento digital de señales"
+     ]
+    },
+    {
+     "ciclo": 8,
+     "curso": "Visión computacional",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Procesamiento de imágenes digitales"
+     ]
+    },
+    {
+     "ciclo": 9,
+     "curso": "Tópicos en procesamiento de lenguaje natural",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Visión computacional"
+     ]
+    },
+    {
+     "ciclo": 10,
+     "curso": "Tópicos en analítica de datos no estructurados",
+     "cr": 4,
+     "th": 6,
+     "prereq": []
+    }
+   ],
+   "Tecnologías de Información": [
+    {
+     "ciclo": 6,
+     "curso": "Robótica I",
+     "cr": 4,
+     "th": 6,
+     "prereq": []
+    },
+    {
+     "ciclo": 7,
+     "curso": "Robótica II",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Robótica I"
+     ]
+    },
+    {
+     "ciclo": 8,
+     "curso": "Redes y Telecomunicaciones II",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Redes y telecomunicaciones I"
+     ]
+    },
+    {
+     "ciclo": 9,
+     "curso": "Redes y Telecomunicaciones III",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Redes y Telecomunicaciones II"
+     ]
+    },
+    {
+     "ciclo": 10,
+     "curso": "Gestión de la ciberseguridad",
+     "cr": 4,
+     "th": 4,
+     "prereq": [
+      "Redes y Telecomunicaciones III"
+     ]
+    }
+   ],
+   "Gestión Integral de la sostenibilidad": [
+    {
+     "ciclo": 7,
+     "curso": "Bases para la gestión estratégica de la sostenibilidad",
+     "cr": 4,
+     "th": 4,
+     "prereq": []
+    },
+    {
+     "ciclo": 8,
+     "curso": "Gestión empresarial sostenible",
+     "cr": 4,
+     "th": 4,
+     "prereq": []
+    },
+    {
+     "ciclo": 9,
+     "curso": "Gestión de emprendimientos socioambientales",
+     "cr": 4,
+     "th": 4,
+     "prereq": []
+    },
+    {
+     "ciclo": 10,
+     "curso": "Gestión del sector público y sociedad civil para el desarrollo sostenible",
+     "cr": 4,
+     "th": 4,
+     "prereq": []
+    }
+   ]
+  }
+ },
+ "Ingeniería de Software": {
+  "obligatorios": [
+   {
+    "ciclo": 1,
+    "curso": "Fundamentos de programación",
+    "cr": 3,
+    "th": 5,
+    "prereq": []
+   },
+   {
+    "ciclo": 1,
+    "curso": "Fundamentos en competencias digitales",
+    "cr": 3,
+    "th": 5,
+    "prereq": []
+   },
+   {
+    "ciclo": 1,
+    "curso": "Matemática",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Nivelación en Matemática"
+    ]
+   },
+   {
+    "ciclo": 1,
+    "curso": "Lenguaje y comunicación I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Nivelación en Lenguaje"
+    ]
+   },
+   {
+    "ciclo": 1,
+    "curso": "Realidad nacional y globalización",
+    "cr": 3,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 1,
+    "curso": "English I",
+    "cr": 5,
+    "th": 8,
+    "prereq": [
+     "Nivelación en Inglés"
+    ]
+   },
+   {
+    "ciclo": 2,
+    "curso": "Programación orientada a objetos I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Fundamentos de programación"
+    ]
+   },
+   {
+    "ciclo": 2,
+    "curso": "Matemática discreta",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Matemática"
+    ]
+   },
+   {
+    "ciclo": 2,
+    "curso": "Cálculo de una variable",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Matemática"
+    ]
+   },
+   {
+    "ciclo": 2,
+    "curso": "Lenguaje y comunicación II",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Lenguaje y comunicación I"
+    ]
+   },
+   {
+    "ciclo": 2,
+    "curso": "Administración para los negocios",
+    "cr": 3,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 2,
+    "curso": "English II",
+    "cr": 5,
+    "th": 8,
+    "prereq": [
+     "English I"
+    ]
+   },
+   {
+    "ciclo": 3,
+    "curso": "Programación y estructuras de datos",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Fundamentos de programación"
+    ]
+   },
+   {
+    "ciclo": 3,
+    "curso": "Ingeniería de software I",
+    "cr": 2,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 3,
+    "curso": "Álgebra lineal computacional",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Matemática"
+    ]
+   },
+   {
+    "ciclo": 3,
+    "curso": "Teoría de computación",
+    "cr": 3,
+    "th": 5,
+    "prereq": [
+     "Cálculo de una variable"
+    ]
+   },
+   {
+    "ciclo": 3,
+    "curso": "Principios de economía",
+    "cr": 3,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 3,
+    "curso": "English III",
+    "cr": 5,
+    "th": 8,
+    "prereq": [
+     "English II"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "Estructura de datos avanzada",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Programación y estructuras de datos"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "Gerenciamiento de datos I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Programación y estructuras de datos"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "Experiencia de usuario (UX)",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Programación y estructuras de datos"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "Estadística descriptiva e inferencia estadística",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Matemática"
+    ]
+   },
+   {
+    "ciclo": 4,
+    "curso": "Fundamentos contables y financieros",
+    "cr": 3,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 4,
+    "curso": "English IV",
+    "cr": 5,
+    "th": 8,
+    "prereq": [
+     "English III"
+    ]
+   },
+   {
+    "ciclo": 5,
+    "curso": "Programación orientada a objetos II",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Programación orientada a objetos I"
+    ]
+   },
+   {
+    "ciclo": 5,
+    "curso": "Ingeniería de software II",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Ingeniería de software I"
+    ]
+   },
+   {
+    "ciclo": 5,
+    "curso": "Gerenciamiento de datos II",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Gerenciamiento de datos I"
+    ]
+   },
+   {
+    "ciclo": 5,
+    "curso": "Interacción humano computador",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 5,
+    "curso": "Ética y ciudadanía",
+    "cr": 3,
+    "th": 3,
+    "prereq": [
+     "Realidad nacional y globalización"
+    ]
+   },
+   {
+    "ciclo": 5,
+    "curso": "Marketing",
+    "cr": 3,
+    "th": 3,
+    "prereq": [
+     "Administración para los negocios"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Ingeniería de software III",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Ingeniería de software II"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Programación competitiva",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Programación orientada a objetos II"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Análisis y diseño de algoritmos",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Programación orientada a objetos II"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Sistemas operativos",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Teoría de computación"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Metodología de la investigación científica",
+    "cr": 4,
+    "th": 4,
+    "prereq": [
+     "Estadística descriptiva e inferencia estadística"
+    ]
+   },
+   {
+    "ciclo": 6,
+    "curso": "Electivo 1",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 7,
+    "curso": "Desarrollo basado en plataformas",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Programación orientada a objetos II"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Compiladores",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Teoría de computación"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Gestión de sistemas de información",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Gerenciamiento de datos II"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Redes y telecomunicaciones I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Sistemas operativos"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Fundamentos del liderazgo sostenible",
+    "cr": 3,
+    "th": 4,
+    "prereq": [
+     "Ética y ciudadanía"
+    ]
+   },
+   {
+    "ciclo": 7,
+    "curso": "Electivo 2",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 8,
+    "curso": "Agentes inteligentes",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Programación orientada a objetos II"
+    ]
+   },
+   {
+    "ciclo": 8,
+    "curso": "Seguridad de la información",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Análisis y diseño de algoritmos"
+    ]
+   },
+   {
+    "ciclo": 8,
+    "curso": "Gestión de proyectos para computación",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Metodología de la investigación científica"
+    ]
+   },
+   {
+    "ciclo": 8,
+    "curso": "Cloud computing",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Redes y telecomunicaciones I"
+    ]
+   },
+   {
+    "ciclo": 8,
+    "curso": "Oportunidades de negocios",
+    "cr": 3,
+    "th": 3,
+    "prereq": [
+     "Fundamentos contables y financieros",
+     "Marketing",
+     "Principios de economía"
+    ]
+   },
+   {
+    "ciclo": 8,
+    "curso": "Electivo 3",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 9,
+    "curso": "Internet of things",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Redes y telecomunicaciones I"
+    ]
+   },
+   {
+    "ciclo": 9,
+    "curso": "Visualización de datos",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Desarrollo basado en plataformas"
+    ]
+   },
+   {
+    "ciclo": 9,
+    "curso": "Proyecto para computación I",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Gestión de proyectos para computación"
+    ]
+   },
+   {
+    "ciclo": 9,
+    "curso": "Tecnologías emergentes",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Cloud computing"
+    ]
+   },
+   {
+    "ciclo": 9,
+    "curso": "Computación en la sociedad",
+    "cr": 2,
+    "th": 4,
+    "prereq": []
+   },
+   {
+    "ciclo": 9,
+    "curso": "Electivo 4",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 10,
+    "curso": "Big data y analítica de datos",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Cloud computing"
+    ]
+   },
+   {
+    "ciclo": 10,
+    "curso": "Estrategias de sistemas de información",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   },
+   {
+    "ciclo": 10,
+    "curso": "Proyecto para computación II",
+    "cr": 4,
+    "th": 6,
+    "prereq": [
+     "Proyecto para computación I"
+    ]
+   },
+   {
+    "ciclo": 10,
+    "curso": "Emprendimiento e innovación tecnológica",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Gestión de proyectos para computación"
+    ]
+   },
+   {
+    "ciclo": 10,
+    "curso": "Desarrollo de negocios electrónicos",
+    "cr": 2,
+    "th": 4,
+    "prereq": [
+     "Tecnologías emergentes"
+    ]
+   },
+   {
+    "ciclo": 10,
+    "curso": "Electivo 5",
+    "cr": 4,
+    "th": 6,
+    "prereq": []
+   }
+  ],
+  "electivos": {
+   "Analítica de datos no estructurados": [
+    {
+     "ciclo": 6,
+     "curso": "Procesamiento digital de señales",
+     "cr": 4,
+     "th": 6,
+     "prereq": []
+    },
+    {
+     "ciclo": 7,
+     "curso": "Procesamiento de imágenes digitales",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Procesamiento digital de señales"
+     ]
+    },
+    {
+     "ciclo": 8,
+     "curso": "Visión computacional",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Procesamiento de imágenes digitales"
+     ]
+    },
+    {
+     "ciclo": 9,
+     "curso": "Tópicos en procesamiento de lenguaje natural",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Visión computacional"
+     ]
+    },
+    {
+     "ciclo": 10,
+     "curso": "Tópicos en analítica de datos no estructurados",
+     "cr": 4,
+     "th": 6,
+     "prereq": []
+    }
+   ],
+   "Tecnologías de Información": [
+    {
+     "ciclo": 6,
+     "curso": "Robótica I",
+     "cr": 4,
+     "th": 6,
+     "prereq": []
+    },
+    {
+     "ciclo": 7,
+     "curso": "Robótica II",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Robótica I"
+     ]
+    },
+    {
+     "ciclo": 8,
+     "curso": "Redes y telecomunicaciones II",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Redes y telecomunicaciones I"
+     ]
+    },
+    {
+     "ciclo": 9,
+     "curso": "Redes y telecomunicaciones III",
+     "cr": 4,
+     "th": 6,
+     "prereq": [
+      "Redes y telecomunicaciones II"
+     ]
+    },
+    {
+     "ciclo": 10,
+     "curso": "Gestión de la ciberseguridad",
+     "cr": 4,
+     "th": 4,
+     "prereq": [
+      "Redes y telecomunicaciones III"
+     ]
+    }
+   ],
+   "Gestión Integral de la sostenibilidad": [
+    {
+     "ciclo": 7,
+     "curso": "Bases para la gestión estratégica de la sostenibilidad",
+     "cr": 4,
+     "th": 4,
+     "prereq": []
+    },
+    {
+     "ciclo": 8,
+     "curso": "Gestión empresarial sostenible",
+     "cr": 4,
+     "th": 4,
+     "prereq": []
+    },
+    {
+     "ciclo": 9,
+     "curso": "Gestión de emprendimientos socioambientales",
+     "cr": 4,
+     "th": 4,
+     "prereq": []
+    },
+    {
+     "ciclo": 10,
+     "curso": "Gestión del sector público y sociedad civil para el desarrollo sostenible",
+     "cr": 4,
+     "th": 4,
+     "prereq": []
+    }
+   ]
+  }
+ }
+}

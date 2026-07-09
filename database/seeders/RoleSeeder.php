@@ -1,0 +1,47 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Permiso;
+use App\Models\Role;
+use Illuminate\Database\Seeder;
+
+class RoleSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Los 7 perfiles del sistema (idempotente).
+        $roles = [
+            Role::SUPERUSUARIO => 'Administrador total del sistema',
+            Role::SERVICIOS    => 'Recibe la solicitud e inicia el flujo (Servicios Académicos)',
+            Role::COORDINADOR  => 'Evaluación académica de sus carreras asignadas',
+            Role::DIRECTOR     => 'Supervisa y valida evaluaciones de sus carreras',
+            Role::DECANO       => 'Autoridad de validación superior por facultad',
+            Role::AUDITOR      => 'Control y transparencia (solo lectura)',
+            Role::CONSULTA     => 'Perfil ejecutivo de indicadores (solo lectura)',
+        ];
+
+        foreach ($roles as $nombre => $descripcion) {
+            Role::updateOrCreate(['nombre' => $nombre], ['descripcion' => $descripcion]);
+        }
+
+        // Catálogo de permisos.
+        foreach (Permiso::CATALOGO as $clave => [$modulo, $descripcion]) {
+            Permiso::updateOrCreate(['clave' => $clave], ['modulo' => $modulo, 'descripcion' => $descripcion]);
+        }
+
+        // Asignación de permisos por rol.
+        $todos = Permiso::pluck('id', 'clave');
+        foreach (Permiso::POR_ROL as $rolNombre => $claves) {
+            $rol = Role::where('nombre', $rolNombre)->first();
+            if (! $rol) {
+                continue;
+            }
+            $ids = $claves === ['*']
+                ? $todos->values()->all()
+                : collect($claves)->map(fn ($c) => $todos[$c] ?? null)->filter()->values()->all();
+
+            $rol->permisos()->sync($ids);
+        }
+    }
+}

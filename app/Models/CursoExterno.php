@@ -4,15 +4,21 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CursoExterno extends Model
 {
     protected $table = 'cursos_externos';
-    protected $fillable = ['carrera_externa_id', 'codigo', 'nombre', 'creditos', 'silabo_texto'];
+    protected $fillable = ['malla_externa_id', 'codigo', 'nombre', 'creditos', 'silabo_texto'];
     protected $casts = ['creditos' => 'decimal:1'];
 
-    public function carreraExterna(): BelongsTo
+    public function mallaExterna(): BelongsTo
     {
-        return $this->belongsTo(CarreraExterna::class, 'carrera_externa_id');
+        return $this->belongsTo(MallaExterna::class, 'malla_externa_id');
+    }
+
+    public function equivalencias(): HasMany
+    {
+        return $this->hasMany(Equivalencia::class, 'curso_externo_id');
     }
 }

@@ -55,12 +55,14 @@ class Permiso extends Model
     // -------- Permisos por rol --------
     public const POR_ROL = [
         Role::SUPERUSUARIO => ['*'], // todos
+        // Admisión: registra y asigna solicitudes y consulta reportes; no ve simulaciones ni equivalencias.
         Role::SERVICIOS => [
             'dashboard.ver', 'solicitudes.ver', 'solicitudes.crear', 'solicitudes.editar',
-            'solicitudes.validar', 'solicitudes.asignar', 'evaluacion.ver', 'reportes.ver',
+            'solicitudes.validar', 'solicitudes.asignar', 'reportes.ver',
         ],
+        // Evalúa equivalencias/simulaciones de sus carreras; los postulantes los gestiona Admisión.
         Role::COORDINADOR => [
-            'dashboard.ver', 'solicitudes.ver', 'evaluacion.ver', 'evaluacion.editar',
+            'dashboard.ver', 'evaluacion.ver', 'evaluacion.editar',
             'evaluacion.proponer', 'catalogos.gestionar', 'reportes.ver',
         ],
         Role::DIRECTOR => [
@@ -69,7 +71,8 @@ class Permiso extends Model
             'evaluacion.reasignar', 'catalogos.gestionar', 'reportes.ver',
         ],
         Role::DECANO => [
-            'dashboard.ver', 'solicitudes.ver', 'evaluacion.ver', 'convalidacion.ver',
+            'dashboard.ver', 'solicitudes.ver', 'evaluacion.ver', 'evaluacion.editar',
+            'evaluacion.proponer', 'evaluacion.aprobar', 'convalidacion.ver',
             'convalidacion.confirmar', 'convalidacion.anular', 'reportes.ver', 'reportes.exportar',
         ],
         Role::AUDITOR => [

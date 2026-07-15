@@ -15,8 +15,9 @@ use App\Models\Facultad;
 use App\Models\MallaCurricular;
 use App\Models\UnidadNegocio;
 use App\Services\AuditoriaService;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
@@ -42,57 +43,55 @@ class MallaController extends Controller
         // RF-04: filtros por unidad de negocio, facultad, carrera y año.
         $mallas = (clone $base)
             ->with('carrera.facultad.unidadNegocio')
-            ->when($request->unidad_negocio_id, fn ($q, $v) =>
-                $q->whereHas('carrera.facultad', fn ($s) => $s->where('unidad_negocio_id', $v)))
-            ->when($request->facultad_id, fn ($q, $v) =>
-                $q->whereHas('carrera', fn ($s) => $s->where('facultad_id', $v)))
+            ->when($request->unidad_negocio_id, fn ($q, $v) => $q->whereHas('carrera.facultad', fn ($s) => $s->where('unidad_negocio_id', $v)))
+            ->when($request->facultad_id, fn ($q, $v) => $q->whereHas('carrera', fn ($s) => $s->where('facultad_id', $v)))
             ->when($request->carrera_id, fn ($q, $v) => $q->where('carrera_id', $v))
             ->when($request->anio, fn ($q, $v) => $q->where('anio', $v))
             ->orderByDesc('anio')->orderBy('version')
             ->paginate(10)->withQueryString()
             ->through(fn (MallaCurricular $m) => [
-                'id'        => $m->id,
-                'unidad'    => $m->carrera->facultad->unidadNegocio->nombre ?? '—',
-                'facultad'  => $m->carrera->facultad->nombre ?? '—',
-                'carrera'   => $m->carrera->nombre,
-                'anio'      => $m->anio,
-                'version'   => $m->version,
+                'id' => $m->id,
+                'unidad' => $m->carrera->facultad->unidadNegocio->nombre ?? '—',
+                'facultad' => $m->carrera->facultad->nombre ?? '—',
+                'carrera' => $m->carrera->nombre,
+                'anio' => $m->anio,
+                'version' => $m->version,
                 'modalidad' => $m->modalidad,
-                'periodo'   => $m->periodo,
-                'activa'    => $m->activa,
-                'origen'    => $m->origen_carga,
+                'periodo' => $m->periodo,
+                'activa' => $m->activa,
+                'origen' => $m->origen_carga,
             ]);
 
         [$unidades, $facultades, $carreras] = $this->opcionesFiltro($user, $scopeIds);
 
         return inertia('Mallas/Index', [
-            'mallas'        => $mallas,
+            'mallas' => $mallas,
             'mallasActivas' => (clone $base)->where('activa', true)->count(),
-            'unidades'      => $unidades,
-            'facultades'    => $facultades,
-            'carreras'      => $carreras,
-            'filtros'       => $request->only(['unidad_negocio_id', 'facultad_id', 'carrera_id', 'anio']),
+            'unidades' => $unidades,
+            'facultades' => $facultades,
+            'carreras' => $carreras,
+            'filtros' => $request->only(['unidad_negocio_id', 'facultad_id', 'carrera_id', 'anio']),
         ]);
     }
 
     /**
      * Opciones para los filtros en cascada, respetando el alcance del usuario.
      *
-     * @return array{0:\Illuminate\Support\Collection,1:\Illuminate\Support\Collection,2:\Illuminate\Support\Collection}
+     * @return array{0:Collection,1:Collection,2:Collection}
      */
     private function opcionesFiltro($user, $scopeIds): array
     {
         if ($user->esAdministrador()) {
-            $carreras   = Carrera::where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'facultad_id']);
+            $carreras = Carrera::where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'facultad_id']);
             $facultades = Facultad::orderBy('nombre')->get(['id', 'nombre', 'unidad_negocio_id']);
-            $unidades   = UnidadNegocio::orderBy('nombre')->get(['id', 'nombre']);
+            $unidades = UnidadNegocio::orderBy('nombre')->get(['id', 'nombre']);
 
             return [$unidades, $facultades, $carreras];
         }
 
-        $carreras   = Carrera::whereIn('id', $scopeIds)->where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'facultad_id']);
+        $carreras = Carrera::whereIn('id', $scopeIds)->where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'facultad_id']);
         $facultades = Facultad::whereIn('id', $carreras->pluck('facultad_id')->unique())->orderBy('nombre')->get(['id', 'nombre', 'unidad_negocio_id']);
-        $unidades   = UnidadNegocio::whereIn('id', $facultades->pluck('unidad_negocio_id')->unique())->orderBy('nombre')->get(['id', 'nombre']);
+        $unidades = UnidadNegocio::whereIn('id', $facultades->pluck('unidad_negocio_id')->unique())->orderBy('nombre')->get(['id', 'nombre']);
 
         return [$unidades, $facultades, $carreras];
     }
@@ -117,14 +116,14 @@ class MallaController extends Controller
             }
 
             $malla = MallaCurricular::create([
-                'carrera_id'   => $datos['carrera_id'],
-                'anio'         => $datos['anio'],
-                'version'      => $datos['version'],
-                'modalidad'    => $datos['modalidad'],
-                'periodo'      => $datos['periodo'] ?? null,
-                'activa'       => $datos['activa'] ?? false,
+                'carrera_id' => $datos['carrera_id'],
+                'anio' => $datos['anio'],
+                'version' => $datos['version'],
+                'modalidad' => $datos['modalidad'],
+                'periodo' => $datos['periodo'] ?? null,
+                'activa' => $datos['activa'] ?? false,
                 'origen_carga' => 'manual',
-                'usuario_id'   => $request->user()->id,
+                'usuario_id' => $request->user()->id,
             ]);
 
             foreach ($datos['ciclos'] as $cicloData) {
@@ -132,8 +131,8 @@ class MallaController extends Controller
 
                 foreach ($cicloData['cursos'] ?? [] as $curso) {
                     $ciclo->cursos()->create([
-                        'codigo'   => $curso['codigo'],
-                        'nombre'   => $curso['nombre'],
+                        'codigo' => $curso['codigo'],
+                        'nombre' => $curso['nombre'],
                         'creditos' => $curso['creditos'],
                     ]);
                 }
@@ -157,13 +156,13 @@ class MallaController extends Controller
 
         return inertia('Mallas/Editar', [
             'malla' => [
-                'id'        => $malla->id,
-                'carrera'   => $malla->carrera->nombre,
-                'anio'      => $malla->anio,
-                'version'   => $malla->version,
+                'id' => $malla->id,
+                'carrera' => $malla->carrera->nombre,
+                'anio' => $malla->anio,
+                'version' => $malla->version,
                 'modalidad' => $malla->modalidad,
-                'periodo'   => $malla->periodo,
-                'activa'    => $malla->activa,
+                'periodo' => $malla->periodo,
+                'activa' => $malla->activa,
             ],
         ]);
     }
@@ -184,11 +183,11 @@ class MallaController extends Controller
             }
 
             $malla->update([
-                'anio'      => $datos['anio'],
-                'version'   => $datos['version'],
+                'anio' => $datos['anio'],
+                'version' => $datos['version'],
                 'modalidad' => $datos['modalidad'],
-                'periodo'   => $datos['periodo'] ?? null,
-                'activa'    => $datos['activa'] ?? false,
+                'periodo' => $datos['periodo'] ?? null,
+                'activa' => $datos['activa'] ?? false,
             ]);
         });
 
@@ -197,6 +196,23 @@ class MallaController extends Controller
         ]));
 
         return redirect()->route('mallas.index')->with('status', 'Malla actualizada correctamente.');
+    }
+
+    /**
+     * Elimina la malla (borrado lógico, RF-05: se conserva el histórico de
+     * convalidaciones que ya la referencian). Los ciclos y cursos quedan
+     * huérfanos pero intactos en la base de datos, no se borran en cascada.
+     */
+    public function destroy(Request $request, MallaCurricular $malla): RedirectResponse
+    {
+        $this->autorizarCarrera($request, $malla->carrera_id);
+
+        $resumen = ['carrera_id' => $malla->carrera_id, 'anio' => $malla->anio, 'version' => $malla->version];
+        $malla->delete();
+
+        AuditoriaService::registrar('eliminar', 'mallas_curriculares', $malla->id, null, $resumen);
+
+        return redirect()->route('mallas.index')->with('status', 'Malla eliminada.');
     }
 
     // ===================== Mantenimiento del currículo (CU-01 / RF-05..07) =====================
@@ -219,61 +235,63 @@ class MallaController extends Controller
 
         return inertia('Mallas/Show', [
             'malla' => [
-                'id'        => $malla->id,
-                'carrera'   => $malla->carrera->nombre,
-                'facultad'  => $malla->carrera->facultad->nombre ?? null,
-                'anio'      => $malla->anio,
-                'version'   => $malla->version,
-                'periodo'   => $malla->periodo,
+                'id' => $malla->id,
+                'carrera' => $malla->carrera->nombre,
+                'facultad' => $malla->carrera->facultad->nombre ?? null,
+                'anio' => $malla->anio,
+                'version' => $malla->version,
+                'periodo' => $malla->periodo,
                 'modalidad' => $malla->modalidad,
-                'activa'    => $malla->activa,
+                'activa' => $malla->activa,
                 'max_ciclos' => $malla->carrera->max_ciclos,
             ],
             'ciclos' => $malla->ciclos->map(fn (Ciclo $c) => [
-                'id'     => $c->id,
+                'id' => $c->id,
                 'numero' => $c->numero,
                 'nombre' => $c->nombre,
                 'cursos' => $c->cursos->map(fn (CursoUsil $cu) => [
-                    'id'             => $cu->id,
-                    'codigo'         => $cu->codigo,
-                    'nombre'         => $cu->nombre,
-                    'creditos'       => (float) $cu->creditos,
-                    'horas_teoria'   => $cu->horas_teoria,
+                    'id' => $cu->id,
+                    'codigo' => $cu->codigo,
+                    'nombre' => $cu->nombre,
+                    'creditos' => (float) $cu->creditos,
+                    'horas_teoria' => $cu->horas_teoria,
                     'horas_practica' => $cu->horas_practica,
-                    'es_electivo'    => $cu->es_electivo,
-                    'convalidable'   => $cu->convalidable,
+                    'es_electivo' => $cu->es_electivo,
+                    'convalidable' => $cu->convalidable,
+                    'mencion' => $cu->mencion,
                     'prerequisito_id' => $cu->prerequisito_id,
-                    'prerequisito'   => $cu->prerequisito?->nombre,
-                    'silabo_texto'   => $cu->silabo_texto,
-                    'tipo_curso'     => $cu->tipo_curso,
-                    'area'           => $cu->area,
-                    'competencias'   => $cu->competencias ?? [],
+                    'prerequisito' => $cu->prerequisito?->nombre ?? $cu->prerequisito_texto,
+                    'silabo_texto' => $cu->silabo_texto,
+                    'tipo_curso' => $cu->tipo_curso,
+                    'area' => $cu->area,
+                    'competencias' => $cu->competencias ?? [],
                     'resultados_aprendizaje' => $cu->resultados_aprendizaje,
-                    'creado'         => $cu->created_at?->format('Y-m-d H:i'),
-                    'actualizado'    => $cu->updated_at?->format('Y-m-d H:i'),
-                    'equivalencias'  => $cu->equivalencias->map(fn ($e) => [
-                        'institucion'   => $e->cursoExterno?->carreraExterna?->institucion?->nombre,
-                        'carrera'       => $e->cursoExterno?->carreraExterna?->nombre,
-                        'curso_externo' => trim(($e->cursoExterno?->codigo ? $e->cursoExterno->codigo . ' — ' : '') . $e->cursoExterno?->nombre),
-                        'tipo'          => $e->tipo_equivalencia,
-                        'origen'        => $e->origen,
+                    'creado' => $cu->created_at?->format('Y-m-d H:i'),
+                    'actualizado' => $cu->updated_at?->format('Y-m-d H:i'),
+                    'equivalencias' => $cu->equivalencias->map(fn ($e) => [
+                        'institucion' => $e->cursoExterno?->carreraExterna?->institucion?->nombre,
+                        'carrera' => $e->cursoExterno?->carreraExterna?->nombre,
+                        'curso_externo' => trim(($e->cursoExterno?->codigo ? $e->cursoExterno->codigo.' — ' : '').$e->cursoExterno?->nombre),
+                        'tipo' => $e->tipo_equivalencia,
+                        'origen' => $e->origen,
                     ])->values(),
                     'convalidaciones' => $cu->detallesSimulacion->map(fn ($d) => [
-                        'estudiante' => trim(($d->simulacion?->nombres ?? '') . ' ' . ($d->simulacion?->apellidos ?? '')),
-                        'estado'     => $d->simulacion?->estado,
-                        'creditos'   => (float) $d->creditos_reconocidos,
-                        'excluido'   => $d->excluido,
+                        'estudiante' => trim(($d->simulacion?->nombres ?? '').' '.($d->simulacion?->apellidos ?? '')),
+                        'estado' => $d->simulacion?->estado,
+                        'creditos' => (float) $d->creditos_reconocidos,
+                        'excluido' => $d->excluido,
                     ])->values(),
                 ]),
             ]),
             'resumen' => [
-                'cursos'       => $cursos->count(),
-                'creditos'     => (float) $cursos->sum('creditos'),
-                'ciclos'       => $malla->ciclos->count(),
+                'cursos' => $cursos->count(),
+                'creditos' => (float) $cursos->sum('creditos'),
+                'ciclos' => $malla->ciclos->count(),
                 'obligatorios' => $cursos->where('es_electivo', false)->count(),
-                'electivos'    => $cursos->where('es_electivo', true)->count(),
+                'electivos' => $cursos->where('es_electivo', true)->count(),
+                'menciones' => $cursos->whereNotNull('mencion')->pluck('mencion')->unique()->count(),
             ],
-            'cursosMalla' => $cursos->map(fn ($cu) => ['id' => $cu->id, 'nombre' => $cu->codigo . ' — ' . $cu->nombre])->values(),
+            'cursosMalla' => $cursos->map(fn ($cu) => ['id' => $cu->id, 'nombre' => $cu->codigo.' — '.$cu->nombre])->values(),
         ]);
     }
 
@@ -282,11 +300,11 @@ class MallaController extends Controller
         $this->autorizarCarrera($request, $malla->carrera_id);
 
         $datos = $request->validate([
-            'numero' => ['required', 'integer', 'min:1', 'max:' . $malla->carrera->max_ciclos,
+            'numero' => ['required', 'integer', 'min:1', 'max:'.$malla->carrera->max_ciclos,
                 Rule::unique('ciclos', 'numero')->where('malla_id', $malla->id)],
             'nombre' => ['nullable', 'string', 'max:50'],
         ], [
-            'numero.max'    => "El ciclo excede el máximo de la carrera ({$malla->carrera->max_ciclos}).",
+            'numero.max' => "El ciclo excede el máximo de la carrera ({$malla->carrera->max_ciclos}).",
             'numero.unique' => 'Ese número de ciclo ya existe en la malla.',
         ]);
 
@@ -348,7 +366,7 @@ class MallaController extends Controller
     /** Plantilla de importación de cursos (Excel con cabeceras y ejemplos). */
     public function plantilla()
     {
-        return Excel::download(new MallaPlantillaExport(), 'plantilla_cursos_malla.xlsx');
+        return Excel::download(new MallaPlantillaExport, 'plantilla_cursos_malla.xlsx');
     }
 
     /** RF-37: exportar los cursos de la malla a Excel. */
@@ -356,7 +374,7 @@ class MallaController extends Controller
     {
         $this->autorizarCarrera($request, $malla->carrera_id);
 
-        $nombre = 'malla_' . str_replace(' ', '_', $malla->version) . '_' . $malla->anio . '.xlsx';
+        $nombre = 'malla_'.str_replace(' ', '_', $malla->version).'_'.$malla->anio.'.xlsx';
 
         return Excel::download(new MallaCursosExport($malla), $nombre);
     }
@@ -374,9 +392,9 @@ class MallaController extends Controller
 
         $carga = CargaMasiva::create([
             'usuario_id' => $request->user()->id,
-            'malla_id'   => $malla->id,
-            'archivo'    => $ruta,
-            'estado'     => 'pendiente',
+            'malla_id' => $malla->id,
+            'archivo' => $ruta,
+            'estado' => 'pendiente',
         ]);
 
         // Con QUEUE_CONNECTION=sync corre de inmediato; con redis, en segundo plano (RF-11).
@@ -389,21 +407,22 @@ class MallaController extends Controller
     private function validarCurso(Request $request, MallaCurricular $malla, ?int $cursoId = null): array
     {
         $datos = $request->validate([
-            'codigo'         => ['required', 'string', 'max:30'],
-            'nombre'         => ['required', 'string', 'max:200'],
-            'creditos'       => ['required', 'numeric', 'min:0.5', 'max:30'],
-            'horas_teoria'   => ['nullable', 'numeric', 'min:0', 'max:30'],
+            'codigo' => ['required', 'string', 'max:30'],
+            'nombre' => ['required', 'string', 'max:200'],
+            'creditos' => ['required', 'numeric', 'min:0.5', 'max:30'],
+            'horas_teoria' => ['nullable', 'numeric', 'min:0', 'max:30'],
             'horas_practica' => ['nullable', 'numeric', 'min:0', 'max:30'],
-            'es_electivo'    => ['boolean'],
-            'convalidable'   => ['boolean'],
-            'tipo_curso'     => ['nullable', 'in:teorico,practico,teorico_practico'],
-            'area'           => ['nullable', 'string', 'max:100'],
-            'competencias'   => ['nullable', 'string', 'max:500'],
+            'es_electivo' => ['boolean'],
+            'convalidable' => ['boolean'],
+            'mencion' => ['nullable', 'string', 'max:150'],
+            'tipo_curso' => ['nullable', 'in:teorico,practico,teorico_practico'],
+            'area' => ['nullable', 'string', 'max:100'],
+            'competencias' => ['nullable', 'string', 'max:500'],
             'resultados_aprendizaje' => ['nullable', 'string'],
             // El prerrequisito debe ser un curso de la misma malla (distinto del actual).
             'prerequisito_id' => ['nullable', $cursoId ? Rule::notIn([$cursoId]) : 'nullable',
                 Rule::exists('cursos_usil', 'id')->where(fn ($q) => $q->whereIn('ciclo_id', $malla->ciclos()->pluck('id')))],
-            'silabo_texto'   => ['nullable', 'string'],
+            'silabo_texto' => ['nullable', 'string'],
         ]);
 
         // Competencias: de texto separado por comas a arreglo.

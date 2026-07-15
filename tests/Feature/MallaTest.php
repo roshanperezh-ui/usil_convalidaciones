@@ -55,6 +55,29 @@ class MallaTest extends TestCase
         $this->assertEquals(1, MallaCurricular::count());
     }
 
+    /** RF-05: al eliminar (borrado lógico) una malla, se debe poder recrear con los mismos datos. */
+    public function test_permite_recrear_malla_tras_eliminarla(): void
+    {
+        $admin = $this->admin();
+        $carrera = $this->carrera();
+
+        $malla = MallaCurricular::create([
+            'carrera_id' => $carrera->id, 'anio' => 2026, 'version' => '2026-I',
+            'origen_carga' => 'manual', 'usuario_id' => $admin->id,
+        ]);
+        $malla->delete();
+
+        $resp = $this->actingAs($admin)->post('/mallas', [
+            'carrera_id' => $carrera->id, 'anio' => 2026, 'version' => '2026-I',
+            'modalidad' => 'presencial',
+            'ciclos' => [['numero' => 1, 'cursos' => [['codigo' => 'C1', 'nombre' => 'Curso 1', 'creditos' => 4]]]],
+        ]);
+
+        $resp->assertSessionDoesntHaveErrors('version_unica');
+        $resp->assertRedirect('/mallas');
+        $this->assertDatabaseHas('mallas_curriculares', ['version' => '2026-I', 'deleted_at' => null]);
+    }
+
     /** RF-01/02: alta manual correcta crea malla, ciclo y curso. */
     public function test_alta_manual_crea_estructura(): void
     {
@@ -63,6 +86,7 @@ class MallaTest extends TestCase
 
         $this->actingAs($admin)->post('/mallas', [
             'carrera_id' => $carrera->id, 'anio' => 2026, 'version' => '2026-II', 'activa' => true,
+            'modalidad' => 'presencial',
             'ciclos' => [['numero' => 1, 'cursos' => [['codigo' => 'MAT101', 'nombre' => 'Cálculo', 'creditos' => 5]]]],
         ])->assertRedirect('/mallas');
 

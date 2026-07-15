@@ -17,7 +17,7 @@ const tab = ref('info');
 
 const form = useForm({
     codigo: '', nombre: '', creditos: '', horas_teoria: '', horas_practica: '',
-    es_electivo: false, convalidable: true, prerequisito_id: '', silabo_texto: '',
+    es_electivo: false, convalidable: true, mencion: '', prerequisito_id: '', silabo_texto: '',
     tipo_curso: '', area: '', competencias: '', resultados_aprendizaje: '',
 });
 
@@ -46,7 +46,7 @@ const editarCurso = () => {
     Object.assign(form, {
         codigo: c.codigo, nombre: c.nombre, creditos: c.creditos,
         horas_teoria: c.horas_teoria ?? '', horas_practica: c.horas_practica ?? '',
-        es_electivo: c.es_electivo, convalidable: c.convalidable ?? true, prerequisito_id: c.prerequisito_id ?? '', silabo_texto: c.silabo_texto ?? '',
+        es_electivo: c.es_electivo, convalidable: c.convalidable ?? true, mencion: c.mencion ?? '', prerequisito_id: c.prerequisito_id ?? '', silabo_texto: c.silabo_texto ?? '',
         tipo_curso: c.tipo_curso ?? '', area: c.area ?? '',
         competencias: (c.competencias ?? []).join(', '), resultados_aprendizaje: c.resultados_aprendizaje ?? '',
     });
@@ -79,6 +79,13 @@ const eliminarCiclo = (ciclo) => {
         router.delete(`/mallas/${props.malla.id}/ciclos/${ciclo.id}`, { preserveScroll: true });
 };
 
+const eliminarMalla = () => {
+    const aviso = props.malla.activa
+        ? `⚠️ Esta es la malla ACTIVA de ${props.malla.carrera} (${props.malla.version}, ${props.resumen.cursos} cursos). ¿Eliminarla de todos modos?`
+        : `¿Eliminar la malla ${props.malla.carrera} — ${props.malla.version} (${props.resumen.cursos} cursos)? Las convalidaciones ya registradas no se ven afectadas.`;
+    if (confirm(aviso)) router.delete(`/mallas/${props.malla.id}`);
+};
+
 // ----- Importar -----
 const importForm = useForm({ archivo: null });
 const fileInput = ref(null);
@@ -101,7 +108,18 @@ const MODALIDAD = { presencial: 'Presencial', hibrido: 'Híbrido', virtual: 'Vir
 const buscar = ref('');
 const filtroTipo = ref('');
 const filtroCiclo = ref('');
-const limpiarFiltros = () => { buscar.value = ''; filtroTipo.value = ''; filtroCiclo.value = ''; };
+const filtroMencion = ref('');
+const limpiarFiltros = () => { buscar.value = ''; filtroTipo.value = ''; filtroCiclo.value = ''; filtroMencion.value = ''; };
+
+// Menciones presentes en la malla (para el filtro y el autocompletado del formulario).
+const mencionesDisponibles = computed(() =>
+    [...new Set(props.ciclos.flatMap((c) => c.cursos.map((cu) => cu.mencion).filter(Boolean)))].sort());
+
+const coincideMencion = (cu) => {
+    if (!filtroMencion.value) return true;
+    if (filtroMencion.value === '__reg') return !cu.mencion;
+    return cu.mencion === filtroMencion.value;
+};
 
 const ciclosVista = computed(() => props.ciclos
     .filter((c) => !filtroCiclo.value || c.numero === Number(filtroCiclo.value))
@@ -109,15 +127,35 @@ const ciclosVista = computed(() => props.ciclos
         ...c,
         cursos: c.cursos.filter((cu) =>
             (!buscar.value || cu.nombre.toLowerCase().includes(buscar.value.toLowerCase())) &&
-            (!filtroTipo.value || (filtroTipo.value === 'electivo' ? cu.es_electivo : !cu.es_electivo))),
+            (!filtroTipo.value || (filtroTipo.value === 'electivo' ? cu.es_electivo : !cu.es_electivo)) &&
+            coincideMencion(cu)),
     })));
 
-// Paleta de color por ciclo (borde superior + acento).
+// Paleta por ciclo: riel lateral + chip del número (clases literales para el JIT de Tailwind).
 const PALETA = [
-    'border-t-blue-500', 'border-t-emerald-500', 'border-t-violet-500', 'border-t-amber-500', 'border-t-rose-500',
-    'border-t-teal-500', 'border-t-sky-500', 'border-t-indigo-500', 'border-t-orange-500', 'border-t-pink-500',
+    { rail: 'border-l-blue-500', bg: 'bg-blue-50', tx: 'text-blue-700' },
+    { rail: 'border-l-emerald-500', bg: 'bg-emerald-50', tx: 'text-emerald-700' },
+    { rail: 'border-l-violet-500', bg: 'bg-violet-50', tx: 'text-violet-700' },
+    { rail: 'border-l-amber-500', bg: 'bg-amber-50', tx: 'text-amber-700' },
+    { rail: 'border-l-rose-500', bg: 'bg-rose-50', tx: 'text-rose-700' },
+    { rail: 'border-l-teal-500', bg: 'bg-teal-50', tx: 'text-teal-700' },
+    { rail: 'border-l-sky-500', bg: 'bg-sky-50', tx: 'text-sky-700' },
+    { rail: 'border-l-indigo-500', bg: 'bg-indigo-50', tx: 'text-indigo-700' },
+    { rail: 'border-l-orange-500', bg: 'bg-orange-50', tx: 'text-orange-700' },
+    { rail: 'border-l-pink-500', bg: 'bg-pink-50', tx: 'text-pink-700' },
 ];
 const colorCiclo = (n) => PALETA[(n - 1) % PALETA.length];
+const creditosCiclo = (c) => c.cursos.reduce((a, cu) => a + (Number(cu.creditos) || 0), 0);
+
+// Colapsar / expandir ciclos.
+const colapsados = reactive(new Set());
+const toggleCiclo = (id) => { colapsados.has(id) ? colapsados.delete(id) : colapsados.add(id); };
+const hayFiltro = computed(() => !!(buscar.value || filtroTipo.value || filtroCiclo.value || filtroMencion.value));
+const todoColapsado = computed(() => props.ciclos.length > 0 && props.ciclos.every((c) => colapsados.has(c.id)));
+const alternarTodos = () => {
+    if (todoColapsado.value) colapsados.clear();
+    else props.ciclos.forEach((c) => colapsados.add(c.id));
+};
 
 const ICON = {
     book: 'M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25',
@@ -125,6 +163,7 @@ const ICON = {
     globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0a8.949 8.949 0 0 0 4.951-1.488A3.987 3.987 0 0 0 13 16h-2a3.987 3.987 0 0 0-3.951 3.512A8.949 8.949 0 0 0 12 21Zm3-11.25a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
     star: 'M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z',
     users: 'M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z',
+    tag: 'M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3ZM6 6h.008v.008H6V6Z',
 };
 const tarjetas = computed(() => [
     { label: 'Cursos totales', valor: props.resumen.cursos, icon: ICON.book, ibg: 'bg-blue-50', it: 'text-blue-600', num: 'text-blue-600' },
@@ -132,6 +171,7 @@ const tarjetas = computed(() => [
     { label: 'Ciclos académicos', valor: props.resumen.ciclos, icon: ICON.globe, ibg: 'bg-violet-50', it: 'text-violet-600', num: 'text-violet-600' },
     { label: 'Obligatorios', valor: props.resumen.obligatorios, icon: ICON.star, ibg: 'bg-amber-50', it: 'text-amber-600', num: 'text-amber-600' },
     { label: 'Electivos', valor: props.resumen.electivos, icon: ICON.users, ibg: 'bg-rose-50', it: 'text-rose-600', num: 'text-rose-600' },
+    { label: 'Menciones', valor: props.resumen.menciones, icon: ICON.tag, ibg: 'bg-indigo-50', it: 'text-indigo-600', num: 'text-indigo-600' },
 ]);
 </script>
 
@@ -157,14 +197,20 @@ const tarjetas = computed(() => [
                     <span class="rounded-md bg-slate-100 px-2 py-1"><b class="text-slate-700">{{ resumen.cursos }}</b> cursos</span>
                 </div>
             </div>
-            <Link :href="`/mallas/${malla.id}/editar`" class="inline-flex items-center gap-2 rounded-lg bg-[#1F3864] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#2E75B6]">
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
-                Editar malla
-            </Link>
+            <div class="flex items-center gap-2">
+                <Link :href="`/mallas/${malla.id}/editar`" class="inline-flex items-center gap-2 rounded-lg bg-[#1F3864] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#2E75B6]">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
+                    Editar malla
+                </Link>
+                <button @click="eliminarMalla" class="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:border-red-300 hover:bg-red-50">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                    Eliminar malla
+                </button>
+            </div>
         </div>
 
         <!-- Resumen -->
-        <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div v-for="t in tarjetas" :key="t.label" class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div :class="t.ibg" class="grid h-11 w-11 shrink-0 place-items-center rounded-xl">
                     <svg :class="t.it" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path :d="t.icon" /></svg>
@@ -178,20 +224,7 @@ const tarjetas = computed(() => [
 
         <!-- Barra de acciones -->
         <div class="mb-4 flex flex-wrap items-center gap-2">
-            <button @click="agregarCiclo" :disabled="!puedeAgregarCiclo"
-                    class="inline-flex items-center gap-1.5 rounded-lg bg-[#1F3864] px-3.5 py-2 text-sm font-medium text-white hover:bg-[#2E75B6] disabled:opacity-50"
-                    :title="puedeAgregarCiclo ? '' : 'Se alcanzó el máximo de ciclos de la carrera'">
-                <span class="text-base leading-none">+</span> Nuevo ciclo
-            </button>
-            <a href="/mallas/plantilla" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
-                Plantilla
-            </a>
-            <button @click="fileInput.click()" class="rounded-lg border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Importar Excel</button>
-            <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv" class="hidden" @change="importar" />
             <a :href="`/mallas/${malla.id}/exportar`" class="rounded-lg border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Exportar</a>
-            <span v-if="importForm.processing" class="text-xs text-slate-500">Importando…</span>
-            <span class="ml-auto hidden text-xs text-slate-400 sm:inline">Máx. {{ malla.max_ciclos }} ciclos · descarga la <b class="font-medium">Plantilla</b> para importar con el formato correcto</span>
         </div>
 
         <!-- Buscador + filtros -->
@@ -212,47 +245,72 @@ const tarjetas = computed(() => [
                 <option value="">Todos los ciclos</option>
                 <option v-for="c in ciclos" :key="c.id" :value="c.numero">Ciclo {{ c.numero }}</option>
             </select>
+            <select v-if="mencionesDisponibles.length" v-model="filtroMencion" class="rounded-lg border-slate-300 text-sm focus:border-[#2E75B6] focus:ring-[#2E75B6]">
+                <option value="">Todas las menciones</option>
+                <option value="__reg">Solo ciclos regulares</option>
+                <option v-for="m in mencionesDisponibles" :key="m" :value="m">{{ m }}</option>
+            </select>
             <button @click="limpiarFiltros" class="inline-flex items-center gap-1 text-sm font-medium text-[#2E75B6] hover:underline">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
                 Limpiar filtros
             </button>
         </div>
 
-        <!-- Tablero de ciclos (responsive: columnas en desktop, apilado en móvil) -->
-        <div v-if="ciclos.length" class="flex flex-col gap-4 md:flex-row md:overflow-x-auto md:pb-2">
-            <div v-for="ciclo in ciclosVista" :key="ciclo.id"
-                 :class="colorCiclo(ciclo.numero)"
-                 class="w-full shrink-0 rounded-2xl border-t-4 bg-white shadow-sm ring-1 ring-slate-200 md:w-80">
-                <div class="flex items-center justify-between px-4 py-3">
-                    <span class="text-sm font-semibold text-slate-700">Ciclo {{ ciclo.numero }}</span>
-                    <div class="flex items-center gap-2">
-                        <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{{ ciclo.cursos.length }} cursos</span>
-                        <button v-if="!ciclo.cursos.length" @click="eliminarCiclo(ciclo)" class="text-slate-300 hover:text-red-600" title="Eliminar ciclo">✕</button>
+        <!-- Progresión de ciclos: secciones verticales apiladas y colapsables (el plan es una secuencia, no carriles paralelos) -->
+        <div v-if="ciclos.length">
+            <div class="mb-2 flex items-center justify-end">
+                <button @click="alternarTodos" class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 15 3.75 3.75L15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
+                    {{ todoColapsado ? 'Expandir todo' : 'Contraer todo' }}
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <template v-for="ciclo in ciclosVista" :key="ciclo.id">
+                    <div v-if="!hayFiltro || ciclo.cursos.length"
+                         :class="colorCiclo(ciclo.numero).rail"
+                         class="overflow-hidden rounded-2xl border border-l-4 border-slate-200 bg-white shadow-sm">
+                        <!-- Encabezado del ciclo (clic = colapsar/expandir) -->
+                        <div class="flex items-center gap-2 px-3 py-2.5 sm:px-4">
+                            <button @click="toggleCiclo(ciclo.id)" class="flex flex-1 items-center gap-3 text-left">
+                                <span :class="[colorCiclo(ciclo.numero).bg, colorCiclo(ciclo.numero).tx]"
+                                      class="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-bold">{{ ciclo.numero }}</span>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-semibold text-slate-700">Ciclo {{ ciclo.numero }}</p>
+                                    <p class="text-xs text-slate-400">{{ ciclo.cursos.length }} {{ ciclo.cursos.length === 1 ? 'curso' : 'cursos' }} · {{ creditosCiclo(ciclo) }} créditos</p>
+                                </div>
+                                <svg class="ml-1 h-4 w-4 shrink-0 text-slate-400 transition-transform" :class="colapsados.has(ciclo.id) ? '' : 'rotate-90'"
+                                     fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+                            </button>
+                            <button v-if="!ciclo.cursos.length" @click="eliminarCiclo(ciclo)" class="shrink-0 rounded-md px-1.5 py-0.5 text-slate-300 hover:bg-red-50 hover:text-red-600" title="Eliminar ciclo">✕</button>
+                        </div>
+
+                        <!-- Cursos en grilla (usa el ancho; sin scroll horizontal) -->
+                        <div v-show="!colapsados.has(ciclo.id)" class="grid gap-2.5 border-t border-slate-100 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            <button v-for="curso in ciclo.cursos" :key="curso.id" @click="verCurso(curso)"
+                                    :class="cursoSel && cursoSel.id === curso.id ? 'border-[#2E75B6] ring-1 ring-[#2E75B6]' : 'border-slate-200'"
+                                    class="group flex flex-col rounded-xl border bg-white p-3 text-left transition hover:border-[#2E75B6] hover:shadow-sm">
+                                <div class="flex items-start justify-between gap-2">
+                                    <p class="text-sm font-semibold leading-snug text-slate-800">{{ curso.nombre }}</p>
+                                    <svg class="mt-0.5 h-4 w-4 shrink-0 text-slate-300 group-hover:text-[#2E75B6]" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+                                </div>
+                                <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                                    <span class="text-xs font-medium text-slate-500">{{ curso.creditos }} créd.</span>
+                                    <span :class="curso.es_electivo ? 'bg-rose-50 text-rose-600' : 'bg-violet-50 text-violet-600'"
+                                          class="rounded-full px-2 py-0.5 text-[11px] font-medium">{{ curso.es_electivo ? 'Electivo' : 'Obligatorio' }}</span>
+                                    <span v-if="curso.convalidable === false"
+                                          class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700" title="Este curso no se ofrece como destino de convalidación">No convalidable</span>
+                                    <span v-if="curso.mencion"
+                                          class="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600" :title="`Mención: ${curso.mencion}`">Mención</span>
+                                </div>
+                            </button>
+                            <button @click="nuevoCurso(ciclo)"
+                                    class="flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 py-3 text-sm font-medium text-[#2E75B6] hover:border-[#2E75B6] hover:bg-slate-50">
+                                <span class="text-base leading-none">+</span> Agregar curso
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <div class="space-y-2 px-3 pb-3">
-                    <button v-for="curso in ciclo.cursos" :key="curso.id" @click="verCurso(curso)"
-                            :class="cursoSel && cursoSel.id === curso.id ? 'border-[#2E75B6] ring-1 ring-[#2E75B6]' : 'border-slate-200'"
-                            class="group w-full rounded-xl border bg-white p-3 text-left transition hover:border-[#2E75B6] hover:shadow-sm">
-                        <div class="flex items-start justify-between gap-2">
-                            <p class="text-sm font-semibold leading-snug text-slate-800">{{ curso.nombre }}</p>
-                            <svg class="mt-0.5 h-4 w-4 shrink-0 text-slate-300 group-hover:text-[#2E75B6]" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-                        </div>
-                        <div class="mt-2 flex flex-wrap items-center gap-2">
-                            <span class="text-xs font-medium text-slate-500">{{ curso.creditos }} créditos</span>
-                            <span :class="curso.es_electivo ? 'bg-rose-50 text-rose-600' : 'bg-violet-50 text-violet-600'"
-                                  class="rounded-full px-2 py-0.5 text-[11px] font-medium">{{ curso.es_electivo ? 'Electivo' : 'Obligatorio' }}</span>
-                            <span v-if="curso.convalidable === false"
-                                  class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700" title="Este curso no se ofrece como destino de convalidación">
-                                No convalidable
-                            </span>
-                        </div>
-                    </button>
-                    <button @click="nuevoCurso(ciclo)"
-                            class="w-full rounded-xl border border-dashed border-slate-300 py-2 text-sm text-[#2E75B6] hover:bg-slate-50">
-                        + Agregar curso
-                    </button>
-                </div>
+                </template>
             </div>
         </div>
         <div v-else class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-400">
@@ -293,6 +351,7 @@ const tarjetas = computed(() => [
                         <div><dt class="text-xs text-slate-400">Área</dt><dd class="text-slate-700">{{ cursoSel.area || '—' }}</dd></div>
                         <div><dt class="text-xs text-slate-400">Horas teoría</dt><dd class="text-slate-700">{{ cursoSel.horas_teoria ?? '—' }}</dd></div>
                         <div><dt class="text-xs text-slate-400">Horas práctica</dt><dd class="text-slate-700">{{ cursoSel.horas_practica ?? '—' }}</dd></div>
+                        <div v-if="cursoSel.mencion" class="col-span-2"><dt class="text-xs text-slate-400">Mención / especialidad</dt><dd class="font-medium text-indigo-700">{{ cursoSel.mencion }}</dd></div>
                         <div class="col-span-2"><dt class="text-xs text-slate-400">Prerrequisito</dt><dd class="text-slate-700">{{ cursoSel.prerequisito || '—' }}</dd></div>
                         <div v-if="cursoSel.silabo_texto" class="col-span-2"><dt class="text-xs text-slate-400">Descripción / sílabo</dt><dd class="text-slate-600">{{ cursoSel.silabo_texto }}</dd></div>
                     </dl>
@@ -391,6 +450,12 @@ const tarjetas = computed(() => [
                                 <label class="mb-1 block text-xs font-medium text-slate-500">Área</label>
                                 <input v-model="form.area" type="text" placeholder="Especialidad, General…" class="w-full rounded-md border-slate-300 text-sm" />
                             </div>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-slate-500">Mención / especialidad <span class="text-slate-400">(opcional)</span></label>
+                            <input v-model="form.mencion" list="menciones-datalist" type="text" placeholder="Sin mención (curso del plan regular)" class="w-full rounded-md border-slate-300 text-sm" />
+                            <datalist id="menciones-datalist"><option v-for="m in mencionesDisponibles" :key="m" :value="m" /></datalist>
+                            <p v-if="form.errors.mencion" class="mt-1 text-xs text-red-600">{{ form.errors.mencion }}</p>
                         </div>
                         <div>
                             <label class="mb-1 block text-xs font-medium text-slate-500">Competencias <span class="text-slate-400">(separadas por coma)</span></label>

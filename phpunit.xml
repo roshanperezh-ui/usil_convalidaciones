@@ -22,8 +22,14 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
-        <!-- <env name="DB_CONNECTION" value="sqlite"/> -->
-        <!-- <env name="DB_DATABASE" value=":memory:"/> -->
+        <!-- CRÍTICO: sin esto, `php artisan test` usa la base de datos de desarrollo
+             del .env (RefreshDatabase la migra en limpio y la deja vacía). SQLite en
+             memoria no sirve aquí porque las migraciones usan sintaxis de MySQL
+             (p. ej. ALTER TABLE ... MODIFY). Se usa una base de datos de pruebas
+             separada, con el mismo nombre que ya usa CI (.github/workflows/ci.yml).
+             force="true" para que esto valga siempre, incluso si el shell ya trae
+             DB_DATABASE definida (como en CI, donde además coincide el valor). -->
+        <env name="DB_DATABASE" value="convalidaciones_test" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

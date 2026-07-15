@@ -17,8 +17,8 @@ class MallaPlantillaExport implements WithMultipleSheets
     public function sheets(): array
     {
         return [
-            new PlantillaCursosSheet(),
-            new PlantillaInstruccionesSheet(),
+            new PlantillaCursosSheet,
+            new PlantillaInstruccionesSheet,
         ];
     }
 }
@@ -33,16 +33,17 @@ class PlantillaCursosSheet implements FromArray, WithHeadings, WithTitle
 
     public function headings(): array
     {
-        return ['ciclo', 'codigo', 'nombre', 'creditos', 'horas_teoria', 'horas_practica', 'caracter'];
+        return ['ciclo', 'codigo', 'nombre', 'creditos', 'horas_teoria', 'horas_practica', 'caracter', 'mencion'];
     }
 
     public function array(): array
     {
         // Filas de ejemplo (elimínelas y agregue sus cursos).
         return [
-            [1, 'MAT101', 'Cálculo I', 4, 2, 4, 'Obligatorio'],
-            [1, 'PRG101', 'Fundamentos de Programación', 3, 2, 2, 'Obligatorio'],
-            [2, 'ELE201', 'Curso Electivo (ejemplo)', 4, 3, 2, 'Electivo'],
+            [1, 'MAT101', 'Cálculo I', 4, 2, 4, 'Obligatorio', ''],
+            [1, 'PRG101', 'Fundamentos de Programación', 3, 2, 2, 'Obligatorio', ''],
+            [2, 'ELE201', 'Curso Electivo (ejemplo)', 4, 3, 2, 'Electivo', ''],
+            [6, 'ESP601', 'Curso de especialidad (ejemplo)', 4, 3, 2, 'Electivo', 'Analítica de datos'],
         ];
     }
 }
@@ -77,6 +78,7 @@ class PlantillaInstruccionesSheet implements FromArray, WithHeadings, WithTitle
             'horas_teoria     (opcional)    Número mayor o igual a 0.',
             'horas_practica   (opcional)    Número mayor o igual a 0.',
             'caracter         (opcional)    "Obligatorio" o "Electivo". Por defecto: Obligatorio.',
+            'mencion          (opcional)    Nombre de la mención/especialidad. Vacío = curso del plan regular.',
             '',
             'Reglas de validación:',
             '- El número de ciclo debe estar entre 1 y 14; si el ciclo no existe, se crea automáticamente.',

@@ -2,15 +2,15 @@
 
 namespace Database\Seeders;
 
-use App\Models\Carrera;
 use App\Models\Modalidad;
-use App\Models\PlanEstudio;
 use App\Models\UnidadNegocio;
 use Illuminate\Database\Seeder;
 
 /**
- * Datos base de la Estructura Institucional: códigos/dirección de sedes,
- * modalidades y un plan de estudios de demostración.
+ * Datos base de la Estructura Institucional: sedes (código y dirección) y
+ * modalidades de estudio. Los Programas de Estudios se cargan aparte en
+ * UsilPregradoSeeder; los Planes de Estudios y Mallas Curriculares se dan
+ * de alta manualmente desde la UI.
  *
  * Ejecutar: php artisan db:seed --class=EstructuraSeeder
  */
@@ -24,7 +24,7 @@ class EstructuraSeeder extends Seeder
             ['USIL Virtual', 'SEDE-VIRT', 'Plataforma de educación a distancia'],
         ];
         foreach ($sedes as [$nombre, $codigo, $direccion]) {
-            UnidadNegocio::where('nombre', $nombre)->update(['codigo' => $codigo, 'direccion' => $direccion]);
+            UnidadNegocio::updateOrCreate(['nombre' => $nombre], ['codigo' => $codigo, 'direccion' => $direccion]);
         }
         // Cualquier otra sede sin código recibe uno generado.
         UnidadNegocio::whereNull('codigo')->get()->each(function (UnidadNegocio $s) {
@@ -36,29 +36,6 @@ class EstructuraSeeder extends Seeder
             Modalidad::updateOrCreate(['codigo' => $codigo], ['nombre' => $nombre, 'activo' => true]);
         }
 
-        // --- Programa demo: grado y título ---
-        Carrera::where('codigo', 'ISI')->update([
-            'grado_academico'    => 'Bachiller en Ingeniería de Sistemas de Información',
-            'titulo_profesional' => 'Ingeniero de Sistemas de Información',
-        ]);
-
-        // --- Plan de estudios demo ---
-        $isi = Carrera::where('codigo', 'ISI')->first();
-        $presencial = Modalidad::where('codigo', 'PRE')->first();
-        if ($isi && $presencial) {
-            PlanEstudio::updateOrCreate(
-                ['codigo' => 'PLAN-ISI-2024-PRE'],
-                [
-                    'carrera_id'   => $isi->id,
-                    'modalidad_id' => $presencial->id,
-                    'nombre'       => 'Plan de Estudios ISI 2024',
-                    'anio'         => 2024,
-                    'version'      => 'v1.0',
-                    'activo'       => true,
-                ]
-            );
-        }
-
-        $this->command->info('Estructura sembrada: sedes con código, 3 modalidades y 1 plan de estudios demo.');
+        $this->command->info('Estructura sembrada: 2 sedes con código y 3 modalidades.');
     }
 }

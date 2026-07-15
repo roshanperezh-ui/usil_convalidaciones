@@ -1,7 +1,7 @@
 <script setup>
 import { Link, router } from '@inertiajs/vue3';
 import { computed, reactive, ref, watch } from 'vue';
-import Autocomplete from '../../Components/Autocomplete.vue';
+import MapeoUsilMatch from '../../Components/MapeoUsilMatch.vue';
 
 const props = defineProps({
     postulante: Object,
@@ -23,16 +23,30 @@ const notaMinima = ref(props.edicion?.nota_minima ?? 11);
 const universidadOrigen = ref(props.edicion?.universidad_origen ?? props.postulante.institucion ?? '');
 const observaciones = ref(props.edicion?.observaciones ?? '');
 const procesando = ref(false);
-const mensaje = ref(null);              // { tipo, texto }
+const mensaje = ref(null);              // { tipo, texto } → se muestra como toast arriba a la derecha
+
+// El toast se oculta solo: los "ok" a los 4 s, los errores a los 6 s (dan más tiempo de lectura).
+let mensajeTimer = null;
+watch(mensaje, (m) => {
+    if (mensajeTimer) { clearTimeout(mensajeTimer); mensajeTimer = null; }
+    if (m) mensajeTimer = setTimeout(() => { mensaje.value = null; }, m.tipo === 'ok' ? 4000 : 6000);
+});
 
 const TIPO_DOC = { certificado: 'Certificado de estudios', silabos: 'Sílabos', constancia: 'Constancia' };
+// La escala es un dato de referencia de la solicitud (solo lectura en la cabecera).
+const ESCALA_LABEL = { '0-20': '0 - 20', '0-100': '0 - 100', '0-5': '0 - 5' };
+const escalaLabel = computed(() => ESCALA_LABEL[escala.value] ?? escala.value);
 const documentoId = ref(props.documentos?.[0]?.id ?? '');
 const documentoPath = ref(null);
 const archivo = ref(null);
 const onArchivo = (e) => { archivo.value = e.target.files[0] ?? null; };
 
 // ---------------------------------------------------------------- filas / catálogo
+// _uid: identidad estable en el cliente (clave de Vue y de las líneas de conexión);
+// sin ella, dos cursos con el mismo nombre y sin curso_externo_id colisionan.
+let uidSeq = 0;
 const filaBase = (c = {}) => ({
+    _uid: ++uidSeq,
     curso_externo_id: c.curso_externo_id ?? null,
     curso_origen_nombre: c.nombre ?? '',
     nota_origen: c.nota ?? '',
@@ -53,7 +67,9 @@ const filas = reactive(
                 nota: f.nota_origen,
                 creditos: f.creditos_origen,
                 ciclo: f.ciclo_origen,
-                clasificacion: f.clasificacion,
+                // En modo manual cada curso se evalúa por igual (todos convalidables);
+                // solo el pipeline con IA conserva la clasificación extraída del récord.
+                clasificacion: props.edicion.metodo === 'ia' ? f.clasificacion : 'convalidable',
             }),
             curso_usil_id: f.curso_usil_id ?? '',
             confianza: f.confianza ?? null,
@@ -61,19 +77,6 @@ const filas = reactive(
         : (props.cursosOrigen ?? []).map(filaBase)
 );
 
-// Opciones USIL por fila: un curso ya asignado en otra fila NO aparece (regla 1‑a‑1).
-// Para volver a usarlo, primero debe desasignarse de donde está.
-const usilOptionsPara = (fila) => {
-    const usadosOtros = new Set(
-        filas.filter((f) => f !== fila && f.curso_usil_id).map((f) => Number(f.curso_usil_id))
-    );
-    return [
-        { value: '', label: props.noConvalidar },
-        ...props.poolUsil
-            .filter((p) => !usadosOtros.has(p.id) || Number(fila.curso_usil_id) === p.id)
-            .map((p) => ({ value: p.id, label: p.label })),
-    ];
-};
 const creditosPorId = computed(() => Object.fromEntries(props.poolUsil.map((p) => [p.id, p.creditos])));
 
 const duplicados = computed(() => {
@@ -81,13 +84,19 @@ const duplicados = computed(() => {
     filas.forEach((f) => { if (f.curso_usil_id) cont[f.curso_usil_id] = (cont[f.curso_usil_id] || 0) + 1; });
     return Object.keys(cont).filter((k) => cont[k] > 1).map(Number);
 });
-const esDuplicado = (f) => f.curso_usil_id && duplicados.value.includes(Number(f.curso_usil_id));
 
 const resumen = computed(() => {
     const conv = filas.filter((f) => f.curso_usil_id && f.clasificacion === 'convalidable');
     const creditos = conv.reduce((s, f) => s + (Number(creditosPorId.value[f.curso_usil_id]) || 0), 0);
     return { total: filas.length, convalidados: conv.length, creditos };
 });
+
+// Píldoras de estado de la cabecera (aprobados / desaprobados / no convalidables).
+const conteoEstados = computed(() => ({
+    aprobados: filas.filter((f) => f.clasificacion === 'convalidable').length,
+    desaprobados: filas.filter((f) => f.clasificacion === 'desaprobado').length,
+    noConvalidables: filas.filter((f) => f.clasificacion === 'no_convalidable').length,
+}));
 
 // Cursos convalidables que quedaron SIN un curso USIL asignado (a revisar antes de guardar).
 const filaSinAsignar = (f) => f.clasificacion === 'convalidable' && !f.curso_usil_id;
@@ -100,17 +109,13 @@ const noConvalidadosLista = computed(() => filas.filter((f) => f.clasificacion =
 const desaprobadosLista = computed(() => filas.filter((f) => f.clasificacion === 'desaprobado'));
 const tabPreconv = ref('conv');   // 'conv' | 'no' | 'desap'
 
-const agregarFila = () => filas.push(filaBase());
+// Nombre y créditos llegan desde la tarjeta editable en línea de MapeoUsilMatch (sin window.prompt).
+const agregarFila = ({ nombre, creditos } = {}) => {
+    if (!nombre || !String(nombre).trim()) return;
+    filas.push(filaBase({ nombre: String(nombre).trim(), creditos }));
+};
 const quitarFila = (i) => filas.splice(i, 1);
 const limpiarFilas = () => { filas.splice(0, filas.length); };
-
-// Etiqueta y color del "Tipo" (como en el módulo original: Convalidable / No convalidable (auto)).
-const tipoLabel = (c) => ({ convalidable: 'Convalidable', no_convalidable: 'No convalidable (auto)', desaprobado: 'Desaprobado' }[c] ?? c);
-const tipoBadge = (c) => ({
-    convalidable: 'bg-green-50 text-green-700 ring-green-200',
-    no_convalidable: 'bg-amber-50 text-amber-700 ring-amber-200',
-    desaprobado: 'bg-red-50 text-red-700 ring-red-200',
-}[c] ?? 'bg-slate-100 text-slate-500 ring-slate-200');
 
 // ---------------------------------------------------------------- sugerencias de mapeo
 const nombresConvalidables = () =>
@@ -137,23 +142,22 @@ const aplicarMapa = (mapa) => {
     });
 };
 
-// Selección manual desde el combobox (limpia la afinidad, ya no es una sugerencia).
-const elegirUsil = (fila, valor) => {
-    fila.curso_usil_id = valor === '' || valor == null ? '' : Number(valor);
-    fila.confianza = null;
-};
-
-const sugerir = async (conIA) => {
+// origen: 'ia' | 'similitud' | 'catalogo' — las tres alimentan el mismo panel de emparejamiento.
+const sugerir = async (origenSugerencia) => {
     if (!props.postulante.carrera_destino_id) { mensaje.value = { tipo: 'error', texto: 'El postulante no tiene carrera destino.' }; return; }
     const cursos = nombresConvalidables();
     if (!cursos.length) { mensaje.value = { tipo: 'error', texto: 'No hay cursos convalidables para mapear.' }; return; }
     procesando.value = true; mensaje.value = null;
     try {
-        const url = conIA ? '/simulaciones/sugerir-ia' : '/simulaciones/sugerir-similitud';
-        const { data } = await window.axios.post(url, { carrera_usil_id: props.postulante.carrera_destino_id, cursos });
+        const url = { ia: '/simulaciones/sugerir-ia', similitud: '/simulaciones/sugerir-similitud', catalogo: '/simulaciones/sugerir-catalogo' }[origenSugerencia];
+        const payload = { carrera_usil_id: props.postulante.carrera_destino_id, cursos };
+        if (origenSugerencia === 'catalogo') payload.carrera_externa_id = props.postulante.carrera_externa_id;
+        const { data } = await window.axios.post(url, payload);
+        const antes = Object.keys(data.mapa || {}).length;
         aplicarMapa(data.mapa || {});
-        filas.forEach((f) => { if (f.confianza) f.origen = conIA ? 'ia' : 'similitud'; });
-        mensaje.value = { tipo: 'ok', texto: conIA ? 'Sugerencias de IA aplicadas.' : 'Mapeo por similitud aplicado.' };
+        filas.forEach((f) => { if (f.confianza !== null || Object.prototype.hasOwnProperty.call(data.mapa || {}, f.curso_origen_nombre.trim())) f.origen = origenSugerencia; });
+        const etiqueta = { ia: 'Sugerencias de IA aplicadas.', similitud: 'Mapeo por similitud aplicado.', catalogo: `Se reutilizaron ${antes} equivalencia(s) del catálogo.` }[origenSugerencia];
+        mensaje.value = { tipo: antes || origenSugerencia !== 'catalogo' ? 'ok' : 'error', texto: antes === 0 && origenSugerencia === 'catalogo' ? 'No se encontraron equivalencias registradas para esta institución y carrera.' : etiqueta };
     } catch (e) {
         mensaje.value = { tipo: 'error', texto: e.response?.data?.message || 'No se pudo generar la sugerencia.' };
     } finally { procesando.value = false; }
@@ -217,6 +221,36 @@ const ejecutarExtraccion = async () => {
     } catch (e) {
         mensaje.value = { tipo: 'error', texto: e.response?.data?.message || 'No se pudo procesar el documento.' };
     } finally { procesando.value = false; }
+};
+
+// Modo Manual: extrae los cursos del récord académico (mismo endpoint que el pipeline IA)
+// y los agrega a la bandeja de "Cursos externos" sin tocar las filas ya cargadas, para
+// que el usuario los empareje a mano o con los botones de sugerencia.
+// Idempotente: los cursos cuyo nombre ya está en la bandeja se omiten (recargar no duplica).
+const cargarCursosDesdeDocumento = async () => {
+    await ejecutarExtraccion();
+    if (!extraccion.value) return;
+    const norm = (s) => String(s ?? '').trim().toLowerCase();
+    const existentes = new Set(filas.map((f) => norm(f.curso_origen_nombre)));
+    // Modo manual: todos los cursos del récord entran por igual como convalidables;
+    // el coordinador decide cada equivalencia a mano (no se bloquea ninguno de antemano).
+    const candidatas = [
+        ...(extraccion.value.aprobados ?? []),
+        ...(extraccion.value.no_convalidables ?? []),
+        ...(extraccion.value.desaprobados ?? []),
+    ].map((c) => filaBase({ ...c, clasificacion: 'convalidable' }));
+    let agregados = 0;
+    candidatas.forEach((f) => {
+        if (existentes.has(norm(f.curso_origen_nombre))) return;
+        existentes.add(norm(f.curso_origen_nombre));
+        filas.push(f);
+        agregados++;
+    });
+    const omitidos = candidatas.length - agregados;
+    mensaje.value = {
+        tipo: 'ok',
+        texto: `${agregados} curso(s) agregados a la bandeja` + (omitidos ? ` · ${omitidos} ya estaban cargados.` : '.'),
+    };
 };
 
 // Construye la tabla de mapeo a partir de la extracción validada (al entrar a la etapa 5).
@@ -298,7 +332,7 @@ const guardar = () => {
     peticion
         .then(({ data }) => {
             guardadoId.value = data.id;
-            mensaje.value = { tipo: 'ok', texto: `Preconvalidación ${editando ? 'actualizada' : 'guardada'}. Ya puedes descargar el documento (PDF o Excel).` };
+            mensaje.value = { tipo: 'ok', texto: `Preconvalidación ${editando ? 'actualizada' : 'guardada'}. Revisa el resumen; descarga los documentos en Convalidaciones.` };
         })
         .catch((e) => {
             const errs = e.response?.data?.errors;
@@ -306,18 +340,6 @@ const guardar = () => {
         })
         .finally(() => { procesando.value = false; });
 };
-
-// Descarga robusta: enlace temporal en la misma pestaña (evita bloqueo de pop-ups y pestañas en blanco).
-const descargarArchivo = (url) => {
-    const a = document.createElement('a');
-    a.href = url;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-};
-const descargarPdf = () => guardadoId.value && descargarArchivo(`/simulaciones/${guardadoId.value}/pdf`);
-const descargarExcel = () => guardadoId.value && descargarArchivo(`/simulaciones/${guardadoId.value}/excel`);
 
 // Elimina una simulación previa registrando el motivo en la base de datos.
 const eliminarSimulacion = (s) => {
@@ -331,19 +353,42 @@ const eliminarSimulacion = (s) => {
 <template>
     <div class="mx-auto max-w-6xl">
         <!-- Encabezado -->
-        <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
             <div>
                 <Link href="/simulaciones" class="text-xs font-medium uppercase tracking-wide text-slate-400 hover:text-[#2E75B6]">← Simulaciones</Link>
-                <h1 class="mt-1 text-2xl font-semibold text-[#1F3864]">{{ editando ? `Editar simulación #${edicion.id}` : 'Simular convalidación' }}</h1>
+                <p class="mt-2 font-heading text-xs font-bold uppercase tracking-wide text-[#2E75B6]">
+                    {{ editando ? `Editar simulación #${edicion.id}` : (metodo === 'ia' ? 'Simulación con IA' : 'Simulación manual de convalidación') }}
+                </p>
+                <h1 class="mt-0.5 font-heading text-2xl font-extrabold text-[#1F3864]">
+                    {{ postulante.institucion || postulante.carrera_externa || '—' }}
+                    <span class="font-semibold text-slate-400">→</span>
+                    {{ postulante.carrera_destino || '— sin carrera —' }}
+                </h1>
                 <p class="mt-1 text-sm text-slate-500"><span class="font-medium text-slate-700">{{ postulante.nombre }}</span> · {{ postulante.documento }}</p>
-                <p class="text-xs text-slate-400">
-                    Origen: {{ postulante.institucion || '—' }} · {{ postulante.carrera_externa || '—' }}
-                    &nbsp;→&nbsp; Destino: <span class="font-medium text-slate-600">{{ postulante.carrera_destino || '— sin carrera —' }}</span>
+            </div>
+            <div class="text-right text-sm text-slate-500">
+                <p>Malla <strong class="text-slate-700">{{ postulante.carrera_destino || '—' }}</strong></p>
+                <p v-if="docSeleccionado">Récord:
+                    <a v-if="docSeleccionado.url" :href="docSeleccionado.url" target="_blank" rel="noopener" class="font-semibold text-[#2E75B6] hover:underline">{{ docSeleccionado.nombre }}</a>
+                    <strong v-else class="text-slate-700">{{ docSeleccionado.nombre }}</strong>
                 </p>
             </div>
-            <button v-if="metodo === 'manual'" @click="guardar" :disabled="!tieneMalla || procesando || guardadoId"
-                    class="rounded-lg bg-[#1F3864] px-5 py-2 text-sm font-medium text-white hover:bg-[#2E75B6] disabled:opacity-50">
-                {{ guardadoId ? '✓ Guardada' : (procesando ? 'Guardando…' : 'Guardar simulación') }}</button>
+        </div>
+
+        <!-- Píldoras de estado -->
+        <div v-if="filas.length" class="mb-4 flex flex-wrap gap-2.5">
+            <div class="flex flex-1 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5" style="min-width: 200px;">
+                <span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
+                <span class="text-sm text-emerald-800"><strong>{{ conteoEstados.aprobados }}</strong> aprobados</span>
+            </div>
+            <div class="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5" style="min-width: 180px;">
+                <span class="h-2 w-2 shrink-0 rounded-full bg-slate-400"></span>
+                <span class="text-sm text-slate-600"><strong>{{ conteoEstados.desaprobados }}</strong> desaprobados</span>
+            </div>
+            <div class="flex flex-1 items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5" style="min-width: 200px;">
+                <span class="h-2 w-2 shrink-0 rounded-full bg-rose-500"></span>
+                <span class="text-sm text-rose-800"><strong>{{ conteoEstados.noConvalidables }}</strong> no convalidables</span>
+            </div>
         </div>
 
         <div v-if="!postulante.carrera_destino_id" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -356,85 +401,118 @@ const eliminarSimulacion = (s) => {
             El plan de estudios de <strong>{{ postulante.carrera_destino }}</strong> no tiene cursos cargados, por lo que no hay a qué convalidar. Carga los cursos de la malla en <strong>Estructura → Mallas</strong>.
         </div>
 
-        <div v-if="mensaje" :class="mensaje.tipo === 'ok' ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'"
-             class="mb-4 rounded-lg border px-4 py-2 text-sm">{{ mensaje.texto }}</div>
-
-        <!-- Panel de descargas: aparece al guardar la preconvalidación -->
-        <div v-if="guardadoId" class="mb-4 rounded-xl border border-green-200 bg-green-50 p-4">
-            <p class="mb-3 text-sm font-medium text-green-800">✓ Preconvalidación guardada (expediente #{{ guardadoId }}). Descarga el documento:</p>
-            <div class="flex flex-wrap gap-3">
-                <button @click="descargarPdf" class="inline-flex items-center gap-2 rounded-md border border-[#2E75B6] bg-white px-4 py-2 text-sm font-medium text-[#2E75B6] hover:bg-blue-50">
-                    ⬇️ Descargar preconvalidación (PDF)
+        <!-- Notificaciones tipo toast: emergen arriba a la derecha y se ocultan solas -->
+        <Transition
+            enter-active-class="transition duration-300 ease-out" enter-from-class="translate-x-8 opacity-0" enter-to-class="translate-x-0 opacity-100"
+            leave-active-class="transition duration-200 ease-in" leave-from-class="translate-x-0 opacity-100" leave-to-class="translate-x-8 opacity-0">
+            <div v-if="mensaje" role="alert"
+                 class="fixed right-4 top-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] items-start gap-3 rounded-xl border bg-white p-4 shadow-lg"
+                 :class="mensaje.tipo === 'ok' ? 'border-emerald-200' : 'border-red-200'">
+                <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white"
+                      :class="mensaje.tipo === 'ok' ? 'bg-emerald-500' : 'bg-red-500'">
+                    <svg v-if="mensaje.tipo === 'ok'" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                    <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                </span>
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold" :class="mensaje.tipo === 'ok' ? 'text-emerald-800' : 'text-red-800'">{{ mensaje.tipo === 'ok' ? 'Listo' : 'Atención' }}</p>
+                    <p class="mt-0.5 break-words text-sm text-slate-600">{{ mensaje.texto }}</p>
+                </div>
+                <button type="button" @click="mensaje = null" title="Cerrar" class="shrink-0 text-slate-300 hover:text-slate-500">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
                 </button>
-                <button @click="descargarExcel" class="inline-flex items-center gap-2 rounded-md border border-green-600 bg-white px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100">
-                    ⬇️ Descargar preconvalidación (Excel)
-                </button>
-                <Link :href="`/simulaciones/${guardadoId}`" class="inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-white">Ver detalle</Link>
-                <Link href="/simulaciones" class="inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-white">Ir a simulaciones</Link>
             </div>
-        </div>
+        </Transition>
 
-        <!-- Selector de método -->
-        <div class="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-            <button @click="metodo = 'manual'" :class="metodo === 'manual' ? 'bg-[#1F3864] text-white' : 'text-slate-600 hover:bg-slate-50'" class="rounded-md px-4 py-1.5 text-sm font-medium">Manual</button>
-            <button @click="metodo = 'ia'" :class="metodo === 'ia' ? 'bg-violet-600 text-white' : 'text-slate-600 hover:bg-slate-50'" class="rounded-md px-4 py-1.5 text-sm font-medium">✨ Con IA</button>
+        <!-- Resumen de la simulación guardada. Las descargas (PDF/Excel) se hacen en Convalidaciones. -->
+        <div v-if="guardadoId" class="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5">
+            <div class="flex items-start gap-3">
+                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                </span>
+                <div class="min-w-0">
+                    <p class="font-heading text-base font-bold text-emerald-900">Preconvalidación guardada · Expediente #{{ guardadoId }}</p>
+                    <p class="mt-0.5 text-sm text-emerald-700">Resumen de la simulación de <strong>{{ postulante.nombre }}</strong>. Los documentos (PDF y Excel) se descargan desde el módulo <strong>Convalidaciones</strong>.</p>
+                </div>
+            </div>
+            <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div class="rounded-xl border border-emerald-200 bg-white p-3 text-center">
+                    <p class="text-2xl font-bold text-[#1F3864]">{{ resumen.total }}</p><p class="text-xs text-slate-500">Cursos evaluados</p>
+                </div>
+                <div class="rounded-xl border border-emerald-200 bg-white p-3 text-center">
+                    <p class="text-2xl font-bold text-emerald-600">{{ resumen.convalidados }}</p><p class="text-xs text-slate-500">Convalidados</p>
+                </div>
+                <div class="rounded-xl border border-emerald-200 bg-white p-3 text-center">
+                    <p class="text-2xl font-bold text-[#2E75B6]">{{ resumen.creditos.toFixed(1) }}</p><p class="text-xs text-slate-500">Créditos reconocidos</p>
+                </div>
+                <div class="rounded-xl border border-emerald-200 bg-white p-3 text-center">
+                    <p class="text-2xl font-bold" :class="sinAsignar ? 'text-amber-500' : 'text-slate-400'">{{ sinAsignar }}</p><p class="text-xs text-slate-500">Sin asignar</p>
+                </div>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-3">
+                <Link href="/convalidaciones" class="rounded-lg bg-[#1F3864] px-5 py-2 text-sm font-medium text-white hover:bg-[#2E75B6]">Ir a Convalidaciones</Link>
+                <Link :href="`/simulaciones/${guardadoId}`" class="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">Ver detalle</Link>
+            </div>
         </div>
 
         <!-- ============================= MODO MANUAL ============================= -->
         <template v-if="metodo === 'manual'">
-            <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
-                <div class="flex flex-wrap items-end gap-3">
-                    <div>
-                        <label class="mb-1 block text-xs font-medium text-slate-500">Escala</label>
-                        <select v-model="escala" class="rounded-md border-slate-300 text-sm focus:border-[#2E75B6] focus:ring-[#2E75B6]">
-                            <option value="0-20">0 - 20</option><option value="0-100">0 - 100</option><option value="0-5">0 - 5</option>
+            <!-- Tarjeta de configuración: método, escala/universidad y carga desde el récord -->
+            <div class="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="mb-4 inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+                    <button @click="metodo = 'manual'" :class="metodo === 'manual' ? 'bg-[#1F3864] text-white' : 'text-slate-600 hover:bg-slate-100'" class="rounded-md px-4 py-1.5 text-sm font-bold">Manual</button>
+                    <button @click="metodo = 'ia'" :class="metodo === 'ia' ? 'bg-violet-600 text-white' : 'text-slate-600 hover:bg-slate-100'" class="rounded-md px-4 py-1.5 text-sm font-bold">✨ Asistida</button>
+                </div>
+
+                <!-- Cabecera de datos de la solicitud: solo lectura (provienen del expediente del postulante) -->
+                <dl class="grid gap-x-6 gap-y-3 border-b border-slate-100 pb-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div class="min-w-0">
+                        <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Universidad de origen</dt>
+                        <dd class="mt-0.5 truncate text-sm font-medium text-slate-700">{{ universidadOrigen || postulante.institucion || '—' }}</dd>
+                    </div>
+                    <div class="min-w-0">
+                        <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Carrera de origen</dt>
+                        <dd class="mt-0.5 truncate text-sm font-medium text-slate-700">{{ postulante.carrera_externa || '—' }}</dd>
+                    </div>
+                    <div class="min-w-0">
+                        <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Ciclo de postulación</dt>
+                        <dd class="mt-0.5 truncate text-sm font-medium text-slate-700">{{ postulante.ciclo_postulacion || '—' }}</dd>
+                    </div>
+                    <div class="min-w-0">
+                        <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Escala de notas</dt>
+                        <dd class="mt-0.5 truncate text-sm font-medium text-slate-700">{{ escalaLabel }}</dd>
+                    </div>
+                </dl>
+
+                <div class="mt-4 flex flex-wrap gap-6">
+                    <div class="flex min-w-[320px] flex-[2] flex-col gap-1.5">
+                        <label class="text-xs font-semibold text-slate-500">Récord académico</label>
+                        <select v-if="documentos?.length" v-model="documentoId" class="min-w-0 rounded-lg border-slate-300 text-sm focus:border-[#2E75B6] focus:ring-[#2E75B6]">
+                            <option v-for="d in documentos" :key="d.id" :value="d.id">{{ TIPO_DOC[d.tipo] || d.tipo }} — {{ d.nombre }}</option>
                         </select>
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-xs font-medium text-slate-500">Universidad de origen</label>
-                        <input v-model="universidadOrigen" type="text" class="w-64 rounded-md border-slate-300 text-sm focus:border-[#2E75B6] focus:ring-[#2E75B6]" />
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <button @click="sugerir(false)" :disabled="procesando" class="rounded-md border border-[#2E75B6] px-3 py-2 text-sm font-medium text-[#2E75B6] hover:bg-blue-50 disabled:opacity-50">Sugerir por similitud</button>
-                    <button @click="sugerir(true)" :disabled="procesando || !ia?.disponible" :title="ia?.disponible ? '' : 'Configura la API key'" class="rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50">✨ Sugerir con IA</button>
-                </div>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div><table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr>
-                        <th class="px-3 py-2.5 font-semibold">Curso de origen</th><th class="w-20 px-3 py-2.5 font-semibold">Nota</th>
-                        <th class="w-20 px-3 py-2.5 font-semibold">Créd.</th><th class="w-40 px-3 py-2.5 font-semibold">Clasificación</th>
-                        <th class="px-3 py-2.5 font-semibold">Convalidar con (USIL)</th><th class="w-16 px-3 py-2.5 text-center font-semibold">%</th><th class="w-12 px-3 py-2.5"></th>
-                    </tr></thead>
-                    <tbody class="divide-y divide-slate-100">
-                        <tr v-for="(f, i) in filas" :key="i" :class="filaSinAsignar(f) ? 'bg-amber-50/60' : 'hover:bg-slate-50/70'">
-                            <td class="px-3 py-2"><input v-model="f.curso_origen_nombre" type="text" placeholder="Nombre del curso" class="w-full rounded-md border-slate-300 text-sm focus:border-[#2E75B6] focus:ring-[#2E75B6]" /></td>
-                            <td class="px-3 py-2"><input v-model="f.nota_origen" type="text" class="w-full rounded-md border-slate-300 text-sm" /></td>
-                            <td class="px-3 py-2"><input v-model="f.creditos_origen" type="number" step="0.5" class="w-full rounded-md border-slate-300 text-sm" /></td>
-                            <td class="px-3 py-2"><select v-model="f.clasificacion" class="w-full rounded-md border-slate-300 text-sm">
-                                <option value="convalidable">Convalidable</option><option value="desaprobado">Desaprobado</option><option value="no_convalidable">No convalidable</option></select></td>
-                            <td class="px-3 py-2">
-                                <Autocomplete :model-value="f.curso_usil_id" @update:modelValue="(v) => elegirUsil(f, v)"
-                                              :options="usilOptionsPara(f)" :disabled="f.clasificacion !== 'convalidable'"
-                                              :placeholder="f.clasificacion === 'convalidable' ? 'Elegir curso a convalidar…' : '—'" />
-                            </td>
-                            <td class="px-3 py-2 text-center text-xs text-slate-500">{{ f.confianza ? Number(f.confianza).toFixed(0) : '—' }}</td>
-                            <td class="px-3 py-2 text-center"><button @click="quitarFila(i)" class="text-slate-400 hover:text-red-600" title="Quitar">✕</button></td>
-                        </tr>
-                        <tr v-if="!filas.length"><td colspan="7" class="px-4 py-8 text-center text-slate-400">Sin cursos. Usa «Agregar curso».</td></tr>
-                    </tbody>
-                </table></div>
-                <div class="flex items-center justify-between border-t border-slate-200 px-4 py-3">
-                    <button @click="agregarFila" class="text-sm font-medium text-[#2E75B6] hover:underline">+ Agregar curso</button>
-                    <div class="flex flex-wrap items-center gap-4 text-sm">
-                        <span class="text-slate-500">Cursos: <span class="font-medium text-slate-700">{{ resumen.total }}</span></span>
-                        <span class="text-slate-500">Convalidados: <span class="font-medium text-green-600">{{ resumen.convalidados }}</span></span>
-                        <span v-if="sinAsignar" class="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">{{ sinAsignar }} sin asignar</span>
-                        <span class="text-slate-500">Créditos: <span class="font-semibold text-[#1F3864]">{{ resumen.creditos.toFixed(1) }}</span></span>
+                        <input v-else type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv" @change="onArchivo" class="min-w-0 text-sm text-slate-600" />
+                        <div class="flex flex-wrap items-center gap-2">
+                            <!-- 1ª opción: revisar el récord -->
+                            <a v-if="docSeleccionado?.url" :href="docSeleccionado.url" target="_blank" rel="noopener"
+                               class="inline-flex items-center gap-1.5 rounded-lg bg-[#1F3864] px-3.5 py-2 text-sm font-bold text-white hover:bg-[#2E75B6]">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                                Ver récord
+                            </a>
+                            <!-- 2ª opción: extraer los cursos automáticamente con IA -->
+                            <button type="button" @click="cargarCursosDesdeDocumento" :disabled="procesando || !ia?.disponible || (!documentoId && !archivo)"
+                                    :title="ia?.disponible ? '' : 'Configura la API key en Configuración'"
+                                    class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-violet-300 px-3.5 py-2 text-sm font-bold text-violet-700 hover:bg-violet-50 disabled:opacity-50">
+                                ✨ {{ procesando ? 'Extrayendo…' : 'Cargar cursos automáticamente' }}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
+
+            <MapeoUsilMatch :pool-usil="poolUsil" :filas="filas" :no-convalidar="noConvalidar" :procesando="procesando"
+                             :ia="ia" :carrera-externa-id="postulante.carrera_externa_id"
+                             @sugerir-ia="sugerir('ia')" @sugerir-similitud="sugerir('similitud')" @sugerir-catalogo="sugerir('catalogo')"
+                             @agregar="agregarFila" @quitar="(f) => quitarFila(filas.indexOf(f))" />
+
             <p v-if="duplicados.length" class="mt-2 text-xs text-red-600">⚠️ Hay cursos USIL asignados más de una vez. La convalidación es 1 a 1.</p>
             <div class="mt-4"><label class="mb-1 block text-sm font-medium text-slate-700">Observaciones</label>
                 <textarea v-model="observaciones" rows="2" class="w-full rounded-md border-slate-300 text-sm focus:border-[#2E75B6] focus:ring-[#2E75B6]"></textarea></div>
@@ -447,6 +525,11 @@ const eliminarSimulacion = (s) => {
 
         <!-- ============================= MODO IA (pipeline 6 etapas) ============================= -->
         <template v-else>
+            <div class="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+                <button @click="metodo = 'manual'" :class="metodo === 'manual' ? 'bg-[#1F3864] text-white' : 'text-slate-600 hover:bg-slate-50'" class="rounded-md px-4 py-1.5 text-sm font-bold">Manual</button>
+                <button @click="metodo = 'ia'" :class="metodo === 'ia' ? 'bg-violet-600 text-white' : 'text-slate-600 hover:bg-slate-50'" class="rounded-md px-4 py-1.5 text-sm font-bold">✨ Asistida</button>
+            </div>
+
             <p v-if="!ia?.disponible" class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
                 IA inactiva: ve a <strong>Configuración</strong> y define la API key para ejecutar el pipeline. También puedes usar el modo <strong>Manual</strong>.
             </p>
@@ -559,57 +642,16 @@ const eliminarSimulacion = (s) => {
                     </div>
                 </div>
 
-                <!-- Etapa 5 · Mapeo USIL (réplica del módulo original) -->
+                <!-- Etapa 5 · Mapeo USIL -->
                 <div v-else-if="pasoIA === 5">
                     <h2 class="text-lg font-semibold text-[#1F3864]">🔗 Etapa 5 · Mapeo USIL — {{ postulante.carrera_destino }}</h2>
-                    <p class="mb-3 text-sm text-slate-500">Cada curso aprobado se mapea a un curso USIL (incluye electivos). Regla 1‑a‑1: cada curso USIL solo puede usarse una vez.</p>
+                    <p class="mb-3 text-sm text-slate-500">Cada curso aprobado se empareja con un curso USIL (incluye electivos). Regla 1‑a‑1: cada curso USIL solo puede usarse una vez.</p>
 
-                    <div class="mb-3 flex flex-wrap items-center gap-3">
-                        <button @click="sugerir(true)" :disabled="procesando || !ia?.disponible" :title="ia?.disponible ? '' : 'Configura la API key'"
-                                class="rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50">✨ Sugerir con IA</button>
-                        <button @click="sugerir(false)" :disabled="procesando"
-                                class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">↻ Re-sugerir por similitud</button>
-                        <span class="text-xs text-slate-500">La columna inicia vacía; elige el curso manualmente o usa <strong>✨ Sugerir con IA</strong> ({{ ia?.proveedor === 'openai' ? 'OpenAI' : 'Gemini' }}) para el mapeo semántico.</span>
-                    </div>
+                    <MapeoUsilMatch :pool-usil="poolUsil" :filas="filas" :no-convalidar="noConvalidar" :procesando="procesando"
+                                     :ia="ia" :carrera-externa-id="postulante.carrera_externa_id" solo-lectura
+                                     @sugerir-ia="sugerir('ia')" @sugerir-similitud="sugerir('similitud')" @sugerir-catalogo="sugerir('catalogo')" />
 
-                    <div class="rounded-xl border border-slate-200">
-                        <div><table class="min-w-full divide-y divide-slate-200 text-sm">
-                            <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr>
-                                <th class="px-3 py-2.5 font-semibold">Curso origen</th>
-                                <th class="w-16 px-3 py-2.5 font-semibold">Nota</th>
-                                <th class="w-20 px-3 py-2.5 font-semibold">Créditos</th>
-                                <th class="w-24 px-3 py-2.5 font-semibold">Ciclo</th>
-                                <th class="w-44 px-3 py-2.5 font-semibold">Tipo</th>
-                                <th class="px-3 py-2.5 font-semibold">Convalidar con USIL</th>
-                            </tr></thead>
-                            <tbody class="divide-y divide-slate-100">
-                                <tr v-for="(f, i) in filas" :key="i" :class="filaSinAsignar(f) ? 'bg-amber-50/60' : 'hover:bg-slate-50/70'">
-                                    <td class="px-3 py-2 text-slate-700">{{ f.curso_origen_nombre }}</td>
-                                    <td class="px-3 py-2 text-slate-600">{{ f.nota_origen || '—' }}</td>
-                                    <td class="px-3 py-2 text-slate-600">{{ f.creditos_origen !== '' && f.creditos_origen != null ? f.creditos_origen : '—' }}</td>
-                                    <td class="px-3 py-2 text-slate-600">{{ f.ciclo_origen || '—' }}</td>
-                                    <td class="px-3 py-2">
-                                        <span :class="tipoBadge(f.clasificacion)" class="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset">{{ tipoLabel(f.clasificacion) }}</span>
-                                    </td>
-                                    <td class="px-3 py-2">
-                                        <Autocomplete :model-value="f.curso_usil_id" @update:modelValue="(v) => elegirUsil(f, v)"
-                                                      :options="usilOptionsPara(f)" :disabled="f.clasificacion !== 'convalidable'"
-                                                      :placeholder="f.clasificacion === 'convalidable' ? 'Elegir curso a convalidar…' : '—'" />
-                                        <span v-if="f.confianza" class="mt-0.5 block text-[11px] text-slate-400">afinidad {{ Number(f.confianza).toFixed(0) }}%</span>
-                                    </td>
-                                </tr>
-                                <tr v-if="!filas.length"><td colspan="6" class="px-4 py-8 text-center text-slate-400">Sin cursos para mapear.</td></tr>
-                            </tbody>
-                        </table></div>
-                    </div>
-
-                    <div class="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                        <span class="text-green-600">🎯 {{ resumen.convalidados }} de {{ filas.length }} cursos mapeados (1 a 1)</span>
-                        <span v-if="sinAsignar" class="rounded-full bg-amber-50 px-2.5 py-0.5 font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
-                            {{ sinAsignar }} convalidable(s) sin asignar
-                        </span>
-                        <span v-if="duplicados.length" class="text-red-600">⚠️ Corrige los duplicados (regla 1 a 1).</span>
-                    </div>
+                    <p v-if="duplicados.length" class="mt-2 text-xs text-red-600">⚠️ Hay cursos USIL asignados más de una vez. Corrige los duplicados (regla 1 a 1).</p>
 
                     <div class="mt-6 flex justify-between">
                         <button @click="anteriorIA" class="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">← Anterior</button>

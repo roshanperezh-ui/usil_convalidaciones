@@ -30,7 +30,8 @@ class UpdateMallaRequest extends FormRequest
             'version_unica' => [
                 Rule::unique('mallas_curriculares', 'version')
                     ->where(fn ($q) => $q->where('carrera_id', $malla->carrera_id)->where('anio', $this->anio))
-                    ->ignore($malla->id),
+                    ->ignore($malla->id)
+                    ->withoutTrashed(),
             ],
         ];
     }

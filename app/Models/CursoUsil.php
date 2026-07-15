@@ -12,15 +12,18 @@ class CursoUsil extends Model
     use SoftDeletes;
 
     protected $table = 'cursos_usil';
+
     protected $fillable = [
         'ciclo_id', 'codigo', 'nombre', 'creditos', 'horas_teoria',
-        'horas_practica', 'es_electivo', 'convalidable', 'prerequisito_id', 'silabo_texto',
+        'horas_practica', 'es_electivo', 'convalidable', 'mencion',
+        'prerequisito_id', 'prerequisito_texto', 'silabo_texto',
         'tipo_curso', 'area', 'competencias', 'resultados_aprendizaje',
     ];
+
     protected $casts = [
-        'es_electivo'  => 'boolean',
+        'es_electivo' => 'boolean',
         'convalidable' => 'boolean',
-        'creditos'     => 'decimal:1',
+        'creditos' => 'decimal:1',
         'competencias' => 'array',
     ];
 

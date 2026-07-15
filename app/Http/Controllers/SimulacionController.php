@@ -2,23 +2,31 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\PreconvalidacionExport;
 use App\Models\Carrera;
 use App\Models\CursoExterno;
 use App\Models\CursoUsil;
+use App\Models\Equivalencia;
+use App\Models\MallaCurricular;
 use App\Models\Postulante;
 use App\Models\PostulanteDestino;
+use App\Models\PostulanteDocumento;
 use App\Models\Simulacion;
 use App\Models\SimulacionDetalle;
+use App\Services\AlcanceService;
 use App\Services\AuditoriaService;
 use App\Services\ConvalidacionEngine;
 use App\Services\IAConvalidacionService;
 use App\Services\SimulacionService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Maatwebsite\Excel\Facades\Excel;
 
 /**
  * CU-04/05: Simulación de convalidación (manual y con IA).
@@ -41,7 +49,7 @@ class SimulacionController extends Controller
         $user = $request->user();
 
         // Alcance por rol: null = todas; array = solo esas carreras (RF-40 + Decano por facultad).
-        $carrerasPermitidas = \App\Services\AlcanceService::carrerasVisibles($user);
+        $carrerasPermitidas = AlcanceService::carrerasVisibles($user);
 
         // Una fila por destino solicitado (postulante × carrera USIL): un
         // postulante que pidió varias carreras aparece varias veces.
@@ -61,15 +69,15 @@ class SimulacionController extends Controller
                 $p = $d->postulante;
 
                 return [
-                    'id'                 => $p->id,
-                    'destino_id'         => $d->id,
+                    'id' => $p->id,
+                    'destino_id' => $d->id,
                     'carrera_destino_id' => $d->carrera_id,
-                    'codigo'             => $p->codigo,
-                    'nombre'             => $p->nombre_completo,
-                    'documento'          => "{$p->tipo_documento} {$p->numero_documento}",
-                    'institucion'        => $p->institucionOrigen?->nombre,
-                    'carrera_externa'    => $p->carreraExterna?->nombre,
-                    'carrera_destino'    => $d->carrera?->nombre,
+                    'codigo' => $p->codigo,
+                    'nombre' => $p->nombre_completo,
+                    'documento' => "{$p->tipo_documento} {$p->numero_documento}",
+                    'institucion' => $p->institucionOrigen?->nombre,
+                    'carrera_externa' => $p->carreraExterna?->nombre,
+                    'carrera_destino' => $d->carrera?->nombre,
                     'simulaciones_count' => Simulacion::where('postulante_id', $p->id)
                         ->where('carrera_usil_id', $d->carrera_id)->count(),
                 ];
@@ -77,9 +85,9 @@ class SimulacionController extends Controller
 
         return inertia('Simulaciones/Index', [
             'postulantes' => $postulantes,
-            'carreras'    => Carrera::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
-            'filtros'     => $request->only(['q', 'carrera_destino_id']),
-            'ia'          => ['disponible' => $this->ia->disponible(), 'proveedor' => $this->ia->proveedor()],
+            'carreras' => Carrera::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
+            'filtros' => $request->only(['q', 'carrera_destino_id']),
+            'ia' => ['disponible' => $this->ia->disponible(), 'proveedor' => $this->ia->proveedor()],
         ]);
     }
 
@@ -109,66 +117,56 @@ class SimulacionController extends Controller
         $carreraDestino = $carreraDestinoId ? Carrera::find($carreraDestinoId) : null;
         $pool = $carreraDestinoId ? $this->engine->poolCursosUsil($carreraDestinoId) : [];
 
-        // Cursos de origen precargados desde la carrera externa del postulante.
-        $cursosOrigen = $postulante->carrera_externa_id
-            ? CursoExterno::where('carrera_externa_id', $postulante->carrera_externa_id)
-                ->orderBy('nombre')
-                ->get(['id', 'nombre', 'creditos'])
-                ->map(fn ($c) => [
-                    'curso_externo_id' => $c->id,
-                    'nombre'           => $c->nombre,
-                    'creditos'         => $c->creditos,
-                    'nota'             => '',
-                    'ciclo'            => '',
-                ])->all()
-            : [];
+        // El récord de origen se llena a mano o con el extractor de IA; arranca vacío.
+        $cursosOrigen = [];
 
         // Al editar: se reconstruyen las filas desde el detalle guardado.
         $edicionData = null;
         if ($edicion) {
             $edicionData = [
-                'id'                 => $edicion->id,
-                'metodo'             => $edicion->metodo,
-                'escala_notas'       => $edicion->escala_notas,
-                'nota_minima'        => $edicion->nota_minima,
+                'id' => $edicion->id,
+                'metodo' => $edicion->metodo,
+                'escala_notas' => $edicion->escala_notas,
+                'nota_minima' => $edicion->nota_minima,
                 'universidad_origen' => $edicion->universidad_origen,
-                'observaciones'      => $edicion->observaciones,
-                'filas'              => $edicion->detalles->map(fn (SimulacionDetalle $d) => [
-                    'curso_externo_id'    => $d->curso_externo_id,
+                'observaciones' => $edicion->observaciones,
+                'filas' => $edicion->detalles->map(fn (SimulacionDetalle $d) => [
+                    'curso_externo_id' => $d->curso_externo_id,
                     'curso_origen_nombre' => $d->nombre_origen,
-                    'nota_origen'         => $d->nota_origen,
-                    'creditos_origen'     => $d->creditos_origen,
-                    'ciclo_origen'        => $d->ciclo_origen,
-                    'clasificacion'       => $d->clasificacion,
-                    'curso_usil_id'       => $d->curso_usil_id,
-                    'confianza'           => $d->confianza,
+                    'nota_origen' => $d->nota_origen,
+                    'creditos_origen' => $d->creditos_origen,
+                    'ciclo_origen' => $d->ciclo_origen,
+                    'clasificacion' => $d->clasificacion,
+                    'curso_usil_id' => $d->curso_usil_id,
+                    'confianza' => $d->confianza,
                 ])->values(),
             ];
         }
 
         return [
             'postulante' => [
-                'id'              => $postulante->id,
-                'nombre'          => $postulante->nombre_completo,
-                'documento'       => "{$postulante->tipo_documento} {$postulante->numero_documento}",
-                'institucion'     => $postulante->institucionOrigen?->nombre,
+                'id' => $postulante->id,
+                'nombre' => $postulante->nombre_completo,
+                'documento' => "{$postulante->tipo_documento} {$postulante->numero_documento}",
+                'institucion' => $postulante->institucionOrigen?->nombre,
                 'carrera_externa' => $postulante->carreraExterna?->nombre,
                 'carrera_destino' => $carreraDestino?->nombre,
                 'carrera_destino_id' => $carreraDestinoId,
                 'carrera_externa_id' => $postulante->carrera_externa_id,
-                'ciclo_postulacion'  => $postulante->ciclo_postulacion,
+                'ciclo_postulacion' => $postulante->ciclo_postulacion,
             ],
-            'poolUsil'      => $pool,
-            'cursosOrigen'  => $cursosOrigen,
-            'documentos'    => $postulante->documentos->map(fn ($d) => [
-                'id'     => $d->id,
-                'tipo'   => $d->tipo,
+            'poolUsil' => $pool,
+            'cursosOrigen' => $cursosOrigen,
+            'documentos' => $postulante->documentos->map(fn ($d) => [
+                'id' => $d->id,
+                'tipo' => $d->tipo,
                 'nombre' => $d->nombre_original,
+                'url' => route('documentos.ver', $d->id),
             ]),
-            'tieneMalla'    => $carreraDestinoId ? (bool) $this->engine->mallaDeCarrera($carreraDestinoId) : false,
-            'noConvalidar'  => ConvalidacionEngine::NO_CONVALIDAR,
-            'ia'            => ['disponible' => $this->ia->disponible(), 'proveedor' => $this->ia->proveedor()],
-            'edicion'       => $edicionData,
+            'tieneMalla' => $carreraDestinoId ? (bool) $this->engine->mallaDeCarrera($carreraDestinoId) : false,
+            'noConvalidar' => ConvalidacionEngine::NO_CONVALIDAR,
+            'ia' => ['disponible' => $this->ia->disponible(), 'proveedor' => $this->ia->proveedor()],
+            'edicion' => $edicionData,
             'simulacionesPrevias' => $postulante->simulaciones()
                 ->when($carreraDestinoId, fn ($q) => $q->where('carrera_usil_id', $carreraDestinoId))
                 ->with('carreraUsil')->orderByDesc('id')->get()
@@ -184,12 +182,66 @@ class SimulacionController extends Controller
     {
         $datos = $request->validate([
             'carrera_usil_id' => ['required', 'exists:carreras,id'],
-            'cursos'          => ['array'],
-            'cursos.*'        => ['string'],
+            'cursos' => ['array'],
+            'cursos.*' => ['string'],
         ]);
 
         $pool = $this->engine->poolCursosUsil((int) $datos['carrera_usil_id']);
         $mapa = $this->engine->asignacionOptima($datos['cursos'] ?? [], $pool);
+
+        return response()->json(['mapa' => $mapa]);
+    }
+
+    /**
+     * Sirve el archivo del récord académico del postulante en línea (el navegador
+     * muestra PDF/imagen y permite descargarlo). Solo lectura del expediente.
+     */
+    public function verDocumento(PostulanteDocumento $documento)
+    {
+        abort_unless(Storage::exists($documento->ruta), 404, 'El documento no se encuentra en el almacenamiento.');
+
+        return Storage::response($documento->ruta, $documento->nombre_original);
+    }
+
+    /**
+     * Sugerencia de mapeo reutilizando equivalencias ya registradas en el catálogo
+     * (Equivalencia) para el mismo par carrera externa ↔ carrera USIL. A diferencia
+     * de similitud/IA, esto no "adivina": solo aplica cruces que un evaluador ya
+     * validó antes para esa institución, con 100% de confianza.
+     */
+    public function sugerirCatalogo(Request $request): JsonResponse
+    {
+        $datos = $request->validate([
+            'carrera_usil_id' => ['required', 'exists:carreras,id'],
+            'carrera_externa_id' => ['nullable', 'exists:carreras_externas,id'],
+            'cursos' => ['array'],
+            'cursos.*' => ['string'],
+        ]);
+
+        if (empty($datos['carrera_externa_id'])) {
+            return response()->json(['mapa' => [], 'message' => 'El postulante no tiene carrera externa registrada.']);
+        }
+
+        $pool = $this->engine->poolCursosUsil((int) $datos['carrera_usil_id']);
+        $porId = collect($pool)->keyBy('id');
+
+        // Nombre externo normalizado → curso USIL (solo si ese curso sigue vigente en la malla actual).
+        $porNombreExterno = Equivalencia::where('carrera_usil_id', $datos['carrera_usil_id'])
+            ->where('carrera_externa_id', $datos['carrera_externa_id'])
+            ->with('cursoExterno:id,nombre')
+            ->get()
+            ->filter(fn (Equivalencia $eq) => $eq->cursoExterno && $porId->has($eq->curso_usil_id))
+            ->mapWithKeys(fn (Equivalencia $eq) => [$this->engine->normaliza($eq->cursoExterno->nombre) => $eq->curso_usil_id]);
+
+        $mapa = [];
+        $usados = [];
+        foreach ($datos['cursos'] ?? [] as $curso) {
+            $usilId = $porNombreExterno[$this->engine->normaliza($curso)] ?? null;
+            if ($usilId && ! isset($usados[$usilId])) {
+                $mapa[$curso] = ['curso_usil_id' => $usilId, 'label' => $porId[$usilId]['label'], 'confianza' => 100.0];
+                $usados[$usilId] = true;
+            }
+        }
 
         return response()->json(['mapa' => $mapa]);
     }
@@ -199,8 +251,8 @@ class SimulacionController extends Controller
     {
         $datos = $request->validate([
             'carrera_usil_id' => ['required', 'exists:carreras,id'],
-            'cursos'          => ['array'],
-            'cursos.*'        => ['string'],
+            'cursos' => ['array'],
+            'cursos.*' => ['string'],
         ]);
 
         if (! $this->ia->disponible()) {
@@ -225,8 +277,8 @@ class SimulacionController extends Controller
             $label = $mapeo[$curso] ?? ConvalidacionEngine::NO_CONVALIDAR;
             $mapa[$curso] = [
                 'curso_usil_id' => $porLabel[$label]['id'] ?? null,
-                'label'         => $label,
-                'confianza'     => $label === ConvalidacionEngine::NO_CONVALIDAR ? 0 : 90,
+                'label' => $label,
+                'confianza' => $label === ConvalidacionEngine::NO_CONVALIDAR ? 0 : 90,
             ];
         }
 
@@ -243,7 +295,7 @@ class SimulacionController extends Controller
     {
         $request->validate([
             'documento_id' => ['nullable', 'integer', 'exists:postulante_documentos,id'],
-            'documento'    => ['nullable', 'file', 'max:20480', 'mimes:pdf,png,jpg,jpeg,gif,webp,txt,csv'],
+            'documento' => ['nullable', 'file', 'max:20480', 'mimes:pdf,png,jpg,jpeg,gif,webp,txt,csv'],
             'carrera_externa_id' => ['nullable', 'integer', 'exists:carreras_externas,id'],
         ]);
 
@@ -259,7 +311,7 @@ class SimulacionController extends Controller
 
         // 1) Documento existente del postulante (fuente principal).
         if ($request->filled('documento_id')) {
-            $doc = \App\Models\PostulanteDocumento::with('postulante')->findOrFail($request->integer('documento_id'));
+            $doc = PostulanteDocumento::with('postulante')->findOrFail($request->integer('documento_id'));
             if (! Storage::exists($doc->ruta)) {
                 return response()->json(['message' => 'El documento del postulante no se encuentra en el almacenamiento.'], 404);
             }
@@ -285,15 +337,17 @@ class SimulacionController extends Controller
 
         // Catálogo canónico de la institución de origen (nombres completos y bien acentuados).
         $catalogo = $carreraExternaId
-            ? CursoExterno::where('carrera_externa_id', $carreraExternaId)->pluck('nombre')->all()
+            ? CursoExterno::whereHas('mallaExterna', fn ($q) => $q
+                    ->where('carrera_externa_id', $carreraExternaId)->where('activa', true))
+                ->pluck('nombre')->all()
             : [];
 
         // Completa/normaliza cada nombre extraído contra el catálogo (o formatea a estilo oración).
         $normalizar = fn ($c) => [
-            'nombre'   => $this->engine->nombreCanonico((string) ($c['curso'] ?? ''), $catalogo),
-            'nota'     => $c['nota'] ?? '',
+            'nombre' => $this->engine->nombreCanonico((string) ($c['curso'] ?? ''), $catalogo),
+            'nota' => $c['nota'] ?? '',
             'creditos' => $c['creditos'] ?? '',
-            'ciclo'    => $c['ciclo'] ?? '',
+            'ciclo' => $c['ciclo'] ?? '',
         ];
 
         // Separa por clasificación (no convalidables entre los aprobados).
@@ -310,12 +364,12 @@ class SimulacionController extends Controller
         $desaprobados = array_map($normalizar, $extraccion['desaprobados']);
 
         return response()->json([
-            'estudiante'   => $extraccion['estudiante'],
-            'institucion'  => $extraccion['institucion'],
-            'aprobados'    => $aprobados,
+            'estudiante' => $extraccion['estudiante'],
+            'institucion' => $extraccion['institucion'],
+            'aprobados' => $aprobados,
             'no_convalidables' => $noConv,
             'desaprobados' => $desaprobados,
-            'documento_path'   => $rutaTrazabilidad,
+            'documento_path' => $rutaTrazabilidad,
             'documento_nombre' => $nombre,
         ]);
     }
@@ -352,24 +406,24 @@ class SimulacionController extends Controller
     private function persistirSimulacion(Request $request, ?Simulacion $existente): Simulacion
     {
         $datos = $request->validate([
-            'postulante_id'   => ['required', 'exists:postulantes,id'],
+            'postulante_id' => ['required', 'exists:postulantes,id'],
             'carrera_usil_id' => ['required', 'exists:carreras,id'],
-            'metodo'          => ['required', 'in:manual,ia'],
+            'metodo' => ['required', 'in:manual,ia'],
             'universidad_origen' => ['nullable', 'string', 'max:200'],
-            'documento_path'  => ['nullable', 'string', 'max:500'],
-            'escala_notas'    => ['nullable', 'string', 'max:10'],
-            'nota_minima'     => ['nullable', 'numeric'],
-            'observaciones'   => ['nullable', 'string', 'max:1000'],
-            'filas'                     => ['array'],
+            'documento_path' => ['nullable', 'string', 'max:500'],
+            'escala_notas' => ['nullable', 'string', 'max:10'],
+            'nota_minima' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'observaciones' => ['nullable', 'string', 'max:1000'],
+            'filas' => ['array'],
             'filas.*.curso_origen_nombre' => ['required', 'string', 'max:200'],
-            'filas.*.curso_externo_id'  => ['nullable', 'integer'],
-            'filas.*.curso_usil_id'     => ['nullable', 'integer', 'exists:cursos_usil,id'],
-            'filas.*.nota_origen'       => ['nullable', 'string', 'max:20'],
-            'filas.*.creditos_origen'   => ['nullable', 'numeric'],
-            'filas.*.ciclo_origen'      => ['nullable', 'string', 'max:30'],
-            'filas.*.clasificacion'     => ['required', 'in:convalidable,desaprobado,no_convalidable'],
-            'filas.*.confianza'         => ['nullable', 'numeric'],
-            'filas.*.origen'            => ['nullable', 'in:automatico,manual,ia,similitud'],
+            'filas.*.curso_externo_id' => ['nullable', 'integer'],
+            'filas.*.curso_usil_id' => ['nullable', 'integer', 'exists:cursos_usil,id'],
+            'filas.*.nota_origen' => ['nullable', 'string', 'max:20'],
+            'filas.*.creditos_origen' => ['nullable', 'numeric'],
+            'filas.*.ciclo_origen' => ['nullable', 'string', 'max:30'],
+            'filas.*.clasificacion' => ['required', 'in:convalidable,desaprobado,no_convalidable'],
+            'filas.*.confianza' => ['nullable', 'numeric'],
+            'filas.*.origen' => ['nullable', 'in:automatico,manual,ia,similitud,catalogo'],
         ]);
 
         $postulante = Postulante::findOrFail($datos['postulante_id']);
@@ -378,11 +432,19 @@ class SimulacionController extends Controller
         $malla = $this->engine->mallaDeCarrera((int) $datos['carrera_usil_id']);
         abort_if(! $malla, 422, 'La carrera destino no tiene un plan de estudios (malla) cargado.');
 
-        // Regla 1‑a‑1: un curso USIL no puede repetirse como destino.
+        // Solo se puede convalidar hacia cursos del plan de estudios destino (mismo pool que ve el front).
+        $poolIds = array_flip(array_column($this->engine->poolCursosUsil((int) $datos['carrera_usil_id']), 'id'));
+
+        // Solo las filas convalidables llevan destino; regla 1‑a‑1: un curso USIL no se repite.
         $usados = [];
-        foreach ($datos['filas'] ?? [] as $f) {
+        foreach ($datos['filas'] ?? [] as $i => $f) {
+            if (($f['clasificacion'] ?? '') !== 'convalidable') {
+                $datos['filas'][$i]['curso_usil_id'] = null;
+                continue;
+            }
             $cid = $f['curso_usil_id'] ?? null;
             if ($cid) {
+                abort_if(! isset($poolIds[$cid]), 422, 'Un curso USIL asignado no pertenece al plan de estudios de la carrera destino.');
                 abort_if(isset($usados[$cid]), 422, 'Un curso USIL está asignado más de una vez (regla 1 a 1).');
                 $usados[$cid] = true;
             }
@@ -392,24 +454,24 @@ class SimulacionController extends Controller
 
         return DB::transaction(function () use ($datos, $postulante, $malla, $creditosUsil, $request, $existente) {
             $atributos = [
-                'postulante_id'    => $postulante->id,
-                'nombres'          => $postulante->nombres,
-                'apellidos'        => trim("{$postulante->apellido_paterno} {$postulante->apellido_materno}"),
-                'tipo_documento'   => in_array($postulante->tipo_documento, ['DNI', 'CE', 'PASAPORTE']) ? $postulante->tipo_documento : 'DNI',
+                'postulante_id' => $postulante->id,
+                'nombres' => $postulante->nombres,
+                'apellidos' => trim("{$postulante->apellido_paterno} {$postulante->apellido_materno}"),
+                'tipo_documento' => in_array($postulante->tipo_documento, ['DNI', 'CE', 'PASAPORTE']) ? $postulante->tipo_documento : 'DNI',
                 'numero_documento' => $postulante->numero_documento,
-                'email'            => $postulante->email ?: 'sin-correo@usil.edu.pe',
-                'telefono'         => $postulante->telefono,
-                'ciclo_postulacion'=> $postulante->ciclo_postulacion ?: '2026-1',
+                'email' => $postulante->email ?: 'sin-correo@usil.edu.pe',
+                'telefono' => $postulante->telefono,
+                'ciclo_postulacion' => $postulante->ciclo_postulacion ?: '2026-1',
                 'carrera_externa_id' => $postulante->carrera_externa_id,
-                'carrera_usil_id'  => $datos['carrera_usil_id'],
-                'malla_usil_id'    => $malla->id,
-                'metodo'           => $datos['metodo'],
-                'documento_path'   => $datos['documento_path'] ?? null,
+                'carrera_usil_id' => $datos['carrera_usil_id'],
+                'malla_usil_id' => $malla->id,
+                'metodo' => $datos['metodo'],
+                'documento_path' => $datos['documento_path'] ?? null,
                 'universidad_origen' => $datos['universidad_origen'] ?? $postulante->institucionOrigen?->nombre,
-                'escala_notas'     => $datos['escala_notas'] ?? null,
-                'nota_minima'      => $datos['nota_minima'] ?? null,
-                'observaciones'    => $datos['observaciones'] ?? null,
-                'usuario_id'       => $request->user()->id,
+                'escala_notas' => $datos['escala_notas'] ?? null,
+                'nota_minima' => $datos['nota_minima'] ?? null,
+                'observaciones' => $datos['observaciones'] ?? null,
+                'usuario_id' => $request->user()->id,
             ];
 
             if ($existente) {
@@ -423,17 +485,17 @@ class SimulacionController extends Controller
             foreach ($datos['filas'] ?? [] as $f) {
                 $cid = $f['curso_usil_id'] ?? null;
                 $sim->detalles()->create([
-                    'curso_usil_id'        => $cid,
-                    'curso_externo_id'     => $f['curso_externo_id'] ?? null,
-                    'curso_origen_nombre'  => $f['curso_origen_nombre'],
-                    'nota_origen'          => $f['nota_origen'] ?? null,
-                    'creditos_origen'      => $f['creditos_origen'] ?? null,
-                    'ciclo_origen'         => $f['ciclo_origen'] ?? null,
-                    'clasificacion'        => $f['clasificacion'],
-                    'confianza'            => $f['confianza'] ?? null,
+                    'curso_usil_id' => $cid,
+                    'curso_externo_id' => $f['curso_externo_id'] ?? null,
+                    'curso_origen_nombre' => $f['curso_origen_nombre'],
+                    'nota_origen' => $f['nota_origen'] ?? null,
+                    'creditos_origen' => $f['creditos_origen'] ?? null,
+                    'ciclo_origen' => $f['ciclo_origen'] ?? null,
+                    'clasificacion' => $f['clasificacion'],
+                    'confianza' => $f['confianza'] ?? null,
                     'creditos_reconocidos' => $cid ? (float) ($creditosUsil[$cid] ?? 0) : 0,
-                    'excluido'             => false,
-                    'origen'               => $f['origen'] ?? ($datos['metodo'] === 'ia' ? 'ia' : 'manual'),
+                    'excluido' => false,
+                    'origen' => $f['origen'] ?? ($datos['metodo'] === 'ia' ? 'ia' : 'manual'),
                 ]);
             }
 
@@ -447,25 +509,25 @@ class SimulacionController extends Controller
 
         return inertia('Simulaciones/Detalle', [
             'simulacion' => [
-                'id'         => $simulacion->id,
+                'id' => $simulacion->id,
                 'estudiante' => "{$simulacion->nombres} {$simulacion->apellidos}",
-                'documento'  => "{$simulacion->tipo_documento} {$simulacion->numero_documento}",
-                'carrera'    => $simulacion->carreraUsil?->nombre,
-                'origen'     => $simulacion->universidad_origen ?: $simulacion->carreraExterna?->nombre,
-                'metodo'     => $simulacion->metodo,
-                'estado'     => $simulacion->estado,
+                'documento' => "{$simulacion->tipo_documento} {$simulacion->numero_documento}",
+                'carrera' => $simulacion->carreraUsil?->nombre,
+                'origen' => $simulacion->universidad_origen ?: $simulacion->carreraExterna?->nombre,
+                'metodo' => $simulacion->metodo,
+                'estado' => $simulacion->estado,
                 'documento_fuente' => $simulacion->documento_path ? basename($simulacion->documento_path) : null,
-                'tiene_pdf'  => (bool) $simulacion->pdf_path,
+                'tiene_pdf' => (bool) $simulacion->pdf_path,
             ],
             'detalles' => $simulacion->detalles->map(fn (SimulacionDetalle $d) => [
-                'id'            => $d->id,
+                'id' => $d->id,
                 'curso_externo' => $d->nombre_origen,
-                'nota'          => $d->nota_origen,
-                'curso_usil'    => $d->cursoUsil?->nombre,
+                'nota' => $d->nota_origen,
+                'curso_usil' => $d->cursoUsil?->nombre,
                 'clasificacion' => $d->clasificacion,
-                'confianza'     => $d->confianza,
-                'creditos'      => $d->creditos_reconocidos,
-                'excluido'      => $d->excluido,
+                'confianza' => $d->confianza,
+                'creditos' => $d->creditos_reconocidos,
+                'excluido' => $d->excluido,
             ]),
             'creditos_total' => $this->service->creditosReconocidos($simulacion),
         ]);
@@ -499,7 +561,7 @@ class SimulacionController extends Controller
     /** Traduce errores de la IA a un mensaje claro (saturación, clave, etc.). */
     private function mensajeErrorIA(\Throwable $e, string $prefijo): string
     {
-        if ($e instanceof \Illuminate\Http\Client\RequestException) {
+        if ($e instanceof RequestException) {
             $status = $e->response?->status();
             if (in_array($status, [429, 500, 502, 503, 529], true)) {
                 return 'El servicio de IA está saturado por alta demanda. Espera unos segundos y vuelve a intentar (o cambia de modelo en Configuración).';
@@ -508,6 +570,7 @@ class SimulacionController extends Controller
                 return 'La API key de IA no es válida o no tiene acceso. Revísala en Configuración.';
             }
         }
+
         return "{$prefijo}: {$e->getMessage()}";
     }
 
@@ -516,7 +579,7 @@ class SimulacionController extends Controller
     {
         $nombre = trim("{$simulacion->apellidos} {$simulacion->nombres}");
         // Quita acentos y caracteres no válidos para nombres de archivo.
-        $nombre = \Illuminate\Support\Str::ascii($nombre);
+        $nombre = Str::ascii($nombre);
         $nombre = preg_replace('/[^A-Za-z0-9 ]/', '', $nombre) ?: "postulante_{$simulacion->id}";
 
         return "Preconvalidacion - {$nombre}.{$ext}";
@@ -530,18 +593,18 @@ class SimulacionController extends Controller
             'detalles.cursoUsil.ciclo', 'detalles.cursoExterno',
         ]);
 
-        $convalidados    = $simulacion->detalles->filter(fn ($d) => $d->curso_usil_id && ! $d->excluido);
+        $convalidados = $simulacion->detalles->filter(fn ($d) => $d->curso_usil_id && ! $d->excluido);
         $noConvalidables = $simulacion->detalles->filter(fn ($d) => $d->clasificacion === 'no_convalidable'
             || (! $d->curso_usil_id && $d->clasificacion === 'convalidable'));
-        $desaprobados    = $simulacion->detalles->filter(fn ($d) => $d->clasificacion === 'desaprobado');
+        $desaprobados = $simulacion->detalles->filter(fn ($d) => $d->clasificacion === 'desaprobado');
 
         return [
-            'simulacion'      => $simulacion,
-            'malla'           => \App\Models\MallaCurricular::find($simulacion->malla_usil_id),
-            'creditos'        => (float) $convalidados->sum('creditos_reconocidos'),
-            'convalidados'    => $convalidados,
+            'simulacion' => $simulacion,
+            'malla' => MallaCurricular::find($simulacion->malla_usil_id),
+            'creditos' => (float) $convalidados->sum('creditos_reconocidos'),
+            'convalidados' => $convalidados,
             'noConvalidables' => $noConvalidables,
-            'desaprobados'    => $desaprobados,
+            'desaprobados' => $desaprobados,
         ];
     }
 
@@ -567,16 +630,16 @@ class SimulacionController extends Controller
         AuditoriaService::registrar('crear', 'simulaciones', $simulacion->id, null, ['pdf' => $ruta]);
 
         return response($contenido, 200, [
-            'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . $this->nombreArchivo($simulacion, 'pdf') . '"',
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$this->nombreArchivo($simulacion, 'pdf').'"',
         ]);
     }
 
     /** Descargar la preconvalidación en Excel. */
     public function exportarExcel(Simulacion $simulacion)
     {
-        return \Maatwebsite\Excel\Facades\Excel::download(
-            new \App\Exports\PreconvalidacionExport($simulacion),
+        return Excel::download(
+            new PreconvalidacionExport($simulacion),
             $this->nombreArchivo($simulacion, 'xlsx')
         );
     }

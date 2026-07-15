@@ -68,6 +68,13 @@ const MODALIDADES = {
     virtual: { label: 'Virtual', clase: 'bg-teal-50 text-teal-700 ring-teal-200' },
 };
 const modalidad = (m) => MODALIDADES[m] ?? { label: m ?? '—', clase: 'bg-slate-100 text-slate-600 ring-slate-200' };
+
+const eliminar = (m) => {
+    const aviso = m.activa
+        ? `⚠️ Esta es la malla ACTIVA de ${m.carrera} (${m.version}). ¿Eliminarla de todos modos?`
+        : `¿Eliminar la malla ${m.carrera} — ${m.version}?`;
+    if (confirm(aviso)) router.delete(`/mallas/${m.id}`, { preserveScroll: true });
+};
 </script>
 
 <template>
@@ -183,6 +190,9 @@ const modalidad = (m) => MODALIDADES[m] ?? { label: m ?? '—', clase: 'bg-slate
                                           title="Editar cabecera">
                                         <span aria-hidden="true">✎</span> Editar
                                     </Link>
+                                    <button @click="eliminar(m)"
+                                            class="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:border-red-300 hover:bg-red-50"
+                                            title="Eliminar malla">✕ Eliminar</button>
                                 </div>
                             </td>
                         </tr>

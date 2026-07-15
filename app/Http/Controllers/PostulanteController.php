@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Carrera;
 use App\Models\InstitucionExterna;
 use App\Models\Postulante;
+use App\Models\Simulacion;
 use App\Services\AuditoriaService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,6 +28,12 @@ class PostulanteController extends Controller
         $visibles = \App\Services\AlcanceService::carrerasVisibles($request->user());
 
         $postulantes = Postulante::with(['carreraDestino', 'institucionOrigen'])
+            // Estado de preconvalidación derivado de las simulaciones/convalidaciones reales
+            // (así Admisión ve si su solicitud ya fue atendida, sin tocar el estado manual).
+            ->withCount([
+                'simulaciones',
+                'simulaciones as convalidaciones_count' => fn ($q) => $q->whereHas('convalidacion'),
+            ])
             ->when($visibles !== null, fn ($x) => $x->whereHas('destinos',
                 fn ($d) => $d->whereIn('carrera_id', $visibles ?: [0])))
             ->when($request->q, fn ($x, $v) => $x->where(fn ($w) =>
@@ -49,6 +56,8 @@ class PostulanteController extends Controller
                 'carrera_destino' => $p->carreraDestino?->nombre,
                 'procedencia'     => $p->institucionOrigen?->nombre,
                 'estado'          => $p->estado,
+                'preconvalidacion' => $p->convalidaciones_count > 0 ? 'convalidada'
+                    : ($p->simulaciones_count > 0 ? 'atendida' : 'pendiente'),
             ]);
 
         return inertia('Postulantes/Index', [
@@ -110,7 +119,37 @@ class PostulanteController extends Controller
 
     public function edit(Postulante $postulante)
     {
-        $postulante->load('documentos');
+        $postulante->load([
+            'documentos',
+            'simulaciones.carreraUsil',
+            'simulaciones.convalidacion',
+            'simulaciones.detalles' => fn ($q) => $q->where('excluido', false)->whereNotNull('curso_usil_id'),
+            'simulaciones.detalles.cursoUsil',
+        ]);
+
+        // Resultado de la evaluación del coordinador (solo lectura) para que Admisión lo consulte.
+        $preconvalidaciones = $postulante->simulaciones->sortByDesc('id')->map(fn (Simulacion $s) => [
+            'id'           => $s->id,
+            'carrera'      => $s->carreraUsil?->nombre,
+            'metodo'       => $s->metodo,
+            'estado'       => $s->estado,
+            'fecha'        => optional($s->created_at)->format('d/m/Y H:i'),
+            'convalidados' => $s->detalles->count(),
+            'creditos'     => (float) $s->detalles->sum('creditos_reconocidos'),
+            'cursos'       => $s->detalles->map(fn ($d) => [
+                'origen'   => $d->curso_origen_nombre,
+                'nota'     => $d->nota_origen,
+                'usil'     => $d->cursoUsil?->nombre,
+                'creditos' => (float) $d->creditos_reconocidos,
+            ])->values(),
+            'convalidada'  => (bool) $s->convalidacion,
+            'memorandum'   => $s->convalidacion?->memorandum_numero,
+            'pdf'          => route('postulantes.preconvalidacion.pdf', [$postulante->id, $s->id]),
+            'excel'        => route('postulantes.preconvalidacion.excel', [$postulante->id, $s->id]),
+        ])->values();
+
+        $estadoPre = $postulante->simulaciones->contains(fn ($s) => $s->convalidacion) ? 'convalidada'
+            : ($postulante->simulaciones->isNotEmpty() ? 'atendida' : 'pendiente');
 
         return inertia('Postulantes/Form', $this->opciones() + [
             'postulante' => $postulante->only([
@@ -123,7 +162,75 @@ class PostulanteController extends Controller
                 'carrera_destino_ids' => $postulante->destinos()->pluck('carrera_id')->all(),
                 'documentos'          => $postulante->documentos->map(fn ($d) => ['tipo' => $d->tipo, 'nombre' => $d->nombre_original])->values(),
             ],
+            'preconvalidaciones'       => $preconvalidaciones,
+            'preconvalidacion_estado'  => $estadoPre,
         ]);
+    }
+
+    /**
+     * Devuelve los datos de preconvalidación del postulante como JSON (para el modal en el listado).
+     */
+    public function preconvalidacion(Postulante $postulante)
+    {
+        $postulante->load([
+            'simulaciones.carreraUsil',
+            'simulaciones.convalidacion',
+            'simulaciones.detalles' => fn ($q) => $q->where('excluido', false)->whereNotNull('curso_usil_id'),
+            'simulaciones.detalles.cursoUsil',
+        ]);
+
+        $preconvalidaciones = $postulante->simulaciones->sortByDesc('id')->map(fn (Simulacion $s) => [
+            'id'           => $s->id,
+            'carrera'      => $s->carreraUsil?->nombre,
+            'metodo'       => $s->metodo,
+            'estado'       => $s->estado,
+            'fecha'        => optional($s->created_at)->format('d/m/Y H:i'),
+            'convalidados' => $s->detalles->count(),
+            'creditos'     => (float) $s->detalles->sum('creditos_reconocidos'),
+            'cursos'       => $s->detalles->map(fn ($d) => [
+                'origen'   => $d->curso_origen_nombre,
+                'nota'     => $d->nota_origen,
+                'usil'     => $d->cursoUsil?->nombre,
+                'creditos' => (float) $d->creditos_reconocidos,
+            ])->values(),
+            'convalidada'  => (bool) $s->convalidacion,
+            'memorandum'   => $s->convalidacion?->memorandum_numero,
+            'pdf'          => route('postulantes.preconvalidacion.pdf', [$postulante->id, $s->id]),
+            'excel'        => route('postulantes.preconvalidacion.excel', [$postulante->id, $s->id]),
+        ])->values();
+
+        $estadoPre = $postulante->simulaciones->contains(fn ($s) => $s->convalidacion) ? 'convalidada'
+            : ($postulante->simulaciones->isNotEmpty() ? 'atendida' : 'pendiente');
+
+        return response()->json([
+            'postulante'            => [
+                'id'     => $postulante->id,
+                'nombre' => $postulante->nombre_completo,
+                'codigo' => $postulante->codigo,
+            ],
+            'preconvalidaciones'    => $preconvalidaciones,
+            'preconvalidacion_estado' => $estadoPre,
+        ]);
+    }
+    /**
+     * Descarga el PDF de preconvalidación de un expediente del postulante.
+     * Valida que la simulación pertenezca al postulante (scope manual).
+     */
+    public function preconvalidacionPdf(Postulante $postulante, int $simulacion)
+    {
+        $sim = Simulacion::where('postulante_id', $postulante->id)->findOrFail($simulacion);
+
+        return app(SimulacionController::class)->generarPdf($sim);
+    }
+
+    /**
+     * Descarga el Excel de preconvalidación de un expediente del postulante.
+     */
+    public function preconvalidacionExcel(Postulante $postulante, int $simulacion)
+    {
+        $sim = Simulacion::where('postulante_id', $postulante->id)->findOrFail($simulacion);
+
+        return app(SimulacionController::class)->exportarExcel($sim);
     }
 
     public function update(Request $request, Postulante $postulante): RedirectResponse

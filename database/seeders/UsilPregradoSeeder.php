@@ -9,11 +9,13 @@ use Illuminate\Database\Seeder;
 
 /**
  * Carga las facultades y carreras (programas académicos) de PREGRADO de USIL,
- * según el portal oficial https://usil.edu.pe/pregrado/ (9 facultades, 38 carreras).
+ * según el listado oficial "Carrera de interés" en https://usil.edu.pe/pregrado/
+ * (9 facultades, 40 carreras — validado 2026-07-13, incluye la nueva Facultad
+ * de Ingeniería e Inteligencia Artificial).
  *
- * Idempotente: si una carrera ya existe por nombre, solo actualiza su facultad,
- * grado y título (preserva su código y relaciones, p. ej. ISI). Las nuevas se
- * crean con un código generado. Ejecutar: php artisan db:seed --class=UsilPregradoSeeder
+ * Idempotente: si una carrera ya existe por nombre, solo actualiza su facultad
+ * (preserva su código y relaciones, p. ej. ISI). Las nuevas se crean con un
+ * código generado. Ejecutar: php artisan db:seed --class=UsilPregradoSeeder
  */
 class UsilPregradoSeeder extends Seeder
 {
@@ -24,7 +26,7 @@ class UsilPregradoSeeder extends Seeder
         // [codigo facultad, nombre facultad, [ [nombre carrera, título profesional, ciclos], ... ] ]
         $estructura = [
             ['FIN', 'Facultad de Ingeniería e Inteligencia Artificial', [
-                ['Ingeniería Agroindustrial', 'Ingeniero Agroindustrial', 10],
+                ['Ingeniería Agroindustrial y Negocios Internacionales', 'Ingeniero Agroindustrial', 10],
                 ['Ingeniería Ambiental', 'Ingeniero Ambiental', 10],
                 ['Ingeniería Biomédica', 'Ingeniero Biomédico', 10],
                 ['Ingeniería Civil', 'Ingeniero Civil', 10],
@@ -35,7 +37,9 @@ class UsilPregradoSeeder extends Seeder
                 ['Ingeniería Mecatrónica', 'Ingeniero Mecatrónico', 10],
                 ['Ingeniería de Sistemas de Información', 'Ingeniero de Sistemas de Información', 10],
                 ['Ingeniería de Software', 'Ingeniero de Software', 10],
+                ['Ingeniería en Inteligencia Artificial', 'Ingeniero en Inteligencia Artificial', 10],
                 ['Ciencia de Datos', 'Licenciado en Ciencia de Datos', 10],
+                ['Ciencia de Datos e Inteligencia Artificial', 'Licenciado en Ciencia de Datos e Inteligencia Artificial', 10],
             ]],
             ['FCE', 'Facultad de Ciencias Empresariales', [
                 ['Administración', 'Licenciado en Administración', 10],

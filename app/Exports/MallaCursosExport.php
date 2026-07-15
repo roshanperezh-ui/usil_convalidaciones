@@ -23,26 +23,27 @@ class MallaCursosExport implements FromCollection, WithHeadings, WithMapping
             ->orderBy('numero')
             ->get()
             ->flatMap(fn ($ciclo) => $ciclo->cursos->map(fn ($curso) => [
-                'ciclo'          => $ciclo->numero,
-                'codigo'         => $curso->codigo,
-                'nombre'         => $curso->nombre,
-                'creditos'       => $curso->creditos,
-                'horas_teoria'   => $curso->horas_teoria,
+                'ciclo' => $ciclo->numero,
+                'codigo' => $curso->codigo,
+                'nombre' => $curso->nombre,
+                'creditos' => $curso->creditos,
+                'horas_teoria' => $curso->horas_teoria,
                 'horas_practica' => $curso->horas_practica,
-                'caracter'       => $curso->es_electivo ? 'Electivo' : 'Obligatorio',
+                'caracter' => $curso->es_electivo ? 'Electivo' : 'Obligatorio',
+                'mencion' => $curso->mencion,
             ]));
     }
 
     public function headings(): array
     {
-        return ['ciclo', 'codigo', 'nombre', 'creditos', 'horas_teoria', 'horas_practica', 'caracter'];
+        return ['ciclo', 'codigo', 'nombre', 'creditos', 'horas_teoria', 'horas_practica', 'caracter', 'mencion'];
     }
 
     public function map($fila): array
     {
         return [
             $fila['ciclo'], $fila['codigo'], $fila['nombre'], $fila['creditos'],
-            $fila['horas_teoria'], $fila['horas_practica'], $fila['caracter'],
+            $fila['horas_teoria'], $fila['horas_practica'], $fila['caracter'], $fila['mencion'],
         ];
     }
 }

@@ -47,20 +47,126 @@ class ConvalidacionController extends Controller
         // Alcance por rol: convalidaciones cuya simulación es de una carrera visible.
         $visibles = \App\Services\AlcanceService::carrerasVisibles($request->user());
 
-        $convalidaciones = Convalidacion::with('simulacion')
-            ->when($visibles !== null, fn ($q) => $q->whereHas('simulacion',
-                fn ($s) => $s->whereIn('carrera_usil_id', $visibles ?: [0])))
-            ->orderByDesc('id')
-            ->paginate(15)
-            ->through(fn (Convalidacion $c) => [
-                'id'         => $c->id,
-                'estudiante' => $c->simulacion ? "{$c->simulacion->nombres} {$c->simulacion->apellidos}" : '—',
-                'memorandum' => $c->memorandum_numero,
-                'fecha'      => optional($c->fecha_confirmacion)->format('d/m/Y'),
-                'estado'     => $c->estado,
+        $q = $request->query('q');
+        $estado = $request->query('estado');
+
+        // --- CONVALIDACIONES CONFIRMADAS / ANULADAS ---
+        $convalidacionesQuery = Convalidacion::with([
+            'simulacion.carreraUsil',
+            'simulacion.postulante.institucionOrigen',
+            'simulacion.carreraExterna',
+            'simulacion.detalles' => fn ($q) => $q->where('excluido', false)->whereNotNull('curso_usil_id'),
+            'simulacion.detalles.cursoUsil',
+        ])
+            ->when($visibles !== null, fn ($q) => $q->whereHas('simulacion', fn ($s) => $s->whereIn('carrera_usil_id', $visibles ?: [0])))
+            ->when($estado, fn ($query) => $query->where('estado', $estado))
+            ->when($q, function ($query) use ($q) {
+                $query->whereHas('simulacion', function ($sq) use ($q) {
+                    $sq->where('nombres', 'like', "%{$q}%")
+                       ->orWhere('apellidos', 'like', "%{$q}%")
+                       ->orWhere('numero_documento', 'like', "%{$q}%");
+                })->orWhere('memorandum_numero', 'like', "%{$q}%");
+            });
+
+        $convalidaciones = $convalidacionesQuery->orderByDesc('id')
+            ->paginate(15, ['*'], 'page')
+            ->withQueryString()
+            ->through(function (Convalidacion $c) {
+                $sim = $c->simulacion;
+                $detalles = $sim ? $sim->detalles : collect();
+                
+                return [
+                    'id'               => $c->id,
+                    'simulacion_id'    => $sim?->id,
+                    'estudiante'       => $sim ? "{$sim->nombres} {$sim->apellidos}" : '—',
+                    'documento'        => $sim?->numero_documento,
+                    'carrera'          => $sim?->carreraUsil?->nombre,
+                    'origen'           => $sim?->universidad_origen ?? $sim?->postulante?->institucionOrigen?->nombre ?? $sim?->carreraExterna?->nombre,
+                    'creditos'         => (float) $detalles->sum('creditos_reconocidos'),
+                    'convalidados'     => $detalles->count(),
+                    'memorandum'       => $c->memorandum_numero,
+                    'fecha'            => optional($c->fecha_confirmacion)->format('d/m/Y'),
+                    'estado'           => $c->estado,
+                    'motivo_anulacion' => $c->motivo_anulacion,
+                    'pdf_preconv'      => $sim ? route('convalidaciones.preconvalidacion.pdf', $sim->id) : null,
+                    'excel_preconv'    => $sim ? route('convalidaciones.preconvalidacion.excel', $sim->id) : null,
+                    'cursos'           => $detalles->map(fn ($d) => [
+                        'origen'   => $d->curso_origen_nombre,
+                        'usil'     => $d->cursoUsil?->nombre,
+                        'creditos' => (float) $d->creditos_reconocidos,
+                    ])->values(),
+                ];
+            });
+
+        // --- PRECONVALIDACIONES (Pendientes de confirmar) ---
+        $preconvalidacionesQuery = Simulacion::with([
+            'carreraUsil',
+            'detalles' => fn ($q) => $q->where('excluido', false)->whereNotNull('curso_usil_id'),
+            'detalles.cursoUsil',
+        ])
+            ->whereDoesntHave('convalidacion')
+            ->when($visibles !== null, fn ($q) => $q->whereIn('carrera_usil_id', $visibles ?: [0]))
+            ->when($estado && $estado === 'pendiente', fn ($query) => $query) // If filtering by pending, we show them. If filtering by confirmada/anulada, we might hide this section in UI, but we'll fetch them anyway if no state filter or pending filter is applied.
+            ->when($estado && $estado !== 'pendiente', fn ($query) => $query->where('id', '<', 0)) // Hack to return empty if filtering by other states
+            ->when($q, function ($query) use ($q) {
+                $query->where('nombres', 'like', "%{$q}%")
+                      ->orWhere('apellidos', 'like', "%{$q}%")
+                      ->orWhere('numero_documento', 'like', "%{$q}%");
+            });
+
+        $preconvalidaciones = $preconvalidacionesQuery->orderByDesc('id')
+            ->paginate(15, ['*'], 'pre')
+            ->withQueryString()
+            ->through(fn (Simulacion $s) => [
+                'id'           => $s->id,
+                'estudiante'   => trim("{$s->nombres} {$s->apellidos}") ?: '—',
+                'documento'    => $s->numero_documento,
+                'carrera'      => $s->carreraUsil?->nombre,
+                'origen'       => $s->universidad_origen,
+                'metodo'       => $s->metodo,
+                'fecha'        => optional($s->created_at)->format('d/m/Y H:i'),
+                'estado'       => 'pendiente', // Explicitly marking as pending since it has no convalidacion
+                'convalidados' => $s->detalles->count(),
+                'creditos'     => (float) $s->detalles->sum('creditos_reconocidos'),
+                'pdf'          => route('convalidaciones.preconvalidacion.pdf', $s->id),
+                'excel'        => route('convalidaciones.preconvalidacion.excel', $s->id),
+                'cursos'       => $s->detalles->map(fn ($d) => [
+                    'origen'   => $d->curso_origen_nombre,
+                    'usil'     => $d->cursoUsil?->nombre,
+                    'creditos' => (float) $d->creditos_reconocidos,
+                ])->values(),
             ]);
 
-        return inertia('Convalidaciones/Index', ['convalidaciones' => $convalidaciones]);
+        // --- KPIs ---
+        $baseSimQuery = Simulacion::when($visibles !== null, fn ($q) => $q->whereIn('carrera_usil_id', $visibles ?: [0]));
+        
+        $totalPendientes = (clone $baseSimQuery)->whereDoesntHave('convalidacion')->count();
+        
+        $baseConvQuery = Convalidacion::when($visibles !== null, fn ($q) => $q->whereHas('simulacion', fn ($s) => $s->whereIn('carrera_usil_id', $visibles ?: [0])));
+        
+        $totalConfirmadas = (clone $baseConvQuery)->where('estado', Convalidacion::CONFIRMADA)->count();
+        $totalAnuladas = (clone $baseConvQuery)->where('estado', Convalidacion::ANULADA)->count();
+
+        // Calcular créditos promedio solo de las confirmadas
+        $simIdsConfirmadas = (clone $baseConvQuery)->where('estado', Convalidacion::CONFIRMADA)->pluck('simulacion_id');
+        $creditosTotales = \App\Models\SimulacionDetalle::whereIn('simulacion_id', $simIdsConfirmadas)
+            ->where('excluido', false)
+            ->whereNotNull('curso_usil_id')
+            ->sum('creditos_reconocidos');
+        
+        $creditosPromedio = $totalConfirmadas > 0 ? round($creditosTotales / $totalConfirmadas, 1) : 0;
+
+        return inertia('Convalidaciones/Index', [
+            'convalidaciones'    => $convalidaciones,
+            'preconvalidaciones' => $preconvalidaciones,
+            'filtros'            => ['q' => $q, 'estado' => $estado],
+            'kpis'               => [
+                'pendientes' => $totalPendientes,
+                'confirmadas' => $totalConfirmadas,
+                'anuladas' => $totalAnuladas,
+                'creditos_promedio' => $creditosPromedio,
+            ]
+        ]);
     }
 
     /** RF-30/31: confirmar la convalidación definitiva (1:1 con la simulación). */

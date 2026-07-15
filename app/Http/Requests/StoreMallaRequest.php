@@ -26,7 +26,8 @@ class StoreMallaRequest extends FormRequest
             // RN-01 y RN-03: la combinación carrera + año + versión no debe existir
             'version_unica' => [
                 Rule::unique('mallas_curriculares', 'version')
-                    ->where(fn ($q) => $q->where('carrera_id', $this->carrera_id)->where('anio', $this->anio)),
+                    ->where(fn ($q) => $q->where('carrera_id', $this->carrera_id)->where('anio', $this->anio))
+                    ->withoutTrashed(),
             ],
             'ciclos'                 => ['required', 'array', 'min:1'],
             'ciclos.*.numero'        => ['required', 'integer', 'min:1', 'max:14'],

@@ -52,23 +52,99 @@ class SimulacionTest extends TestCase
             'tipo_equivalencia' => 'completa', 'origen' => 'manual', 'usuario_id' => $user->id,
         ]);
 
-        $this->ctx = compact('user', 'carrera', 'malla', 'carExt');
+        $postulante = \App\Models\Postulante::create([
+            'codigo' => 'POST-2026-00001', 'tipo_documento' => 'DNI', 'numero_documento' => '12345678',
+            'nombres' => 'Ana', 'apellido_paterno' => 'Pérez', 'email' => 'ana@x.com',
+            'ciclo_postulacion' => '2026-1', 'institucion_origen_id' => $inst->id,
+            'carrera_externa_id' => $carExt->id, 'carrera_destino_id' => $carrera->id,
+            'estado' => 'nuevo', 'usuario_id' => $user->id,
+        ]);
+
+        $this->ctx = compact('user', 'carrera', 'malla', 'carExt', 'postulante', 'cursoExt', 'cursoUsil');
     }
 
     /** RF-26: la simulación genera la tabla comparativa automáticamente. */
     public function test_genera_detalle_automatico(): void
     {
         $this->actingAs($this->ctx['user'])->post('/simulaciones', [
-            'nombres' => 'Ana', 'apellidos' => 'Pérez', 'tipo_documento' => 'DNI',
-            'numero_documento' => '12345678', 'email' => 'ana@x.com', 'ciclo_postulacion' => '2026-1',
-            'carrera_externa_id' => $this->ctx['carExt']->id,
+            'postulante_id' => $this->ctx['postulante']->id,
             'carrera_usil_id' => $this->ctx['carrera']->id,
-            'malla_usil_id' => $this->ctx['malla']->id,
+            'metodo' => 'manual',
+            'filas' => [[
+                'curso_origen_nombre' => 'Matemática I',
+                'curso_externo_id' => $this->ctx['cursoExt']->id,
+                'curso_usil_id' => $this->ctx['cursoUsil']->id,
+                'clasificacion' => 'convalidable',
+            ]],
         ]);
 
         $sim = Simulacion::first();
+        $this->assertNotNull($sim, 'La simulación no se creó.');
         $this->assertEquals('generada', $sim->estado);
         $this->assertEquals(1, $sim->detalles()->count());
+    }
+
+    /** Las filas emparejadas desde el catálogo (origen 'catalogo') se guardan sin error. */
+    public function test_guardar_con_origen_catalogo(): void
+    {
+        $resp = $this->actingAs($this->ctx['user'])->postJson('/simulaciones', [
+            'postulante_id' => $this->ctx['postulante']->id,
+            'carrera_usil_id' => $this->ctx['carrera']->id,
+            'metodo' => 'manual',
+            'filas' => [[
+                'curso_origen_nombre' => 'Matemática I',
+                'curso_externo_id' => $this->ctx['cursoExt']->id,
+                'curso_usil_id' => $this->ctx['cursoUsil']->id,
+                'clasificacion' => 'convalidable',
+                'confianza' => 100,
+                'origen' => 'catalogo',
+            ]],
+        ]);
+
+        $resp->assertOk();
+        $this->assertEquals('catalogo', Simulacion::first()->detalles()->first()->origen);
+    }
+
+    /** Un curso USIL de otra carrera/malla no es un destino válido. */
+    public function test_rechaza_curso_usil_de_otra_malla(): void
+    {
+        $otraCarrera = Carrera::create(['facultad_id' => $this->ctx['carrera']->facultad_id, 'nombre' => 'Civil', 'codigo' => 'CIV']);
+        $otraMalla = MallaCurricular::create(['carrera_id' => $otraCarrera->id, 'anio' => 2026, 'version' => 'A', 'origen_carga' => 'manual', 'usuario_id' => $this->ctx['user']->id]);
+        $otroCiclo = Ciclo::create(['malla_id' => $otraMalla->id, 'numero' => 1]);
+        $cursoAjeno = CursoUsil::create(['ciclo_id' => $otroCiclo->id, 'codigo' => 'X1', 'nombre' => 'Topografía', 'creditos' => 3]);
+
+        $resp = $this->actingAs($this->ctx['user'])->postJson('/simulaciones', [
+            'postulante_id' => $this->ctx['postulante']->id,
+            'carrera_usil_id' => $this->ctx['carrera']->id,
+            'metodo' => 'manual',
+            'filas' => [[
+                'curso_origen_nombre' => 'Matemática I',
+                'curso_usil_id' => $cursoAjeno->id,
+                'clasificacion' => 'convalidable',
+            ]],
+        ]);
+
+        $resp->assertStatus(422);
+        $this->assertEquals(0, Simulacion::count());
+    }
+
+    /** Una fila desaprobada/no convalidable no puede llevar destino ni sumar créditos. */
+    public function test_fila_no_convalidable_no_lleva_destino(): void
+    {
+        $this->actingAs($this->ctx['user'])->postJson('/simulaciones', [
+            'postulante_id' => $this->ctx['postulante']->id,
+            'carrera_usil_id' => $this->ctx['carrera']->id,
+            'metodo' => 'manual',
+            'filas' => [[
+                'curso_origen_nombre' => 'Inglés I',
+                'curso_usil_id' => $this->ctx['cursoUsil']->id,   // llega con destino por error
+                'clasificacion' => 'no_convalidable',
+            ]],
+        ])->assertOk();
+
+        $detalle = Simulacion::first()->detalles()->first();
+        $this->assertNull($detalle->curso_usil_id);
+        $this->assertEquals(0, (float) $detalle->creditos_reconocidos);
     }
 
     /** RF-30: confirmar crea convalidación 1:1 e impide duplicado. */

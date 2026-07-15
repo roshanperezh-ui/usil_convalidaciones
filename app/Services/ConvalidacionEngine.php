@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Carrera;
+use App\Models\CursoNoConvalidable;
 use App\Models\MallaCurricular;
 
 /**
@@ -47,10 +48,13 @@ class ConvalidacionEngine
             return '';
         }
         $t = mb_strtolower($texto, 'UTF-8');
-        // Quita acentos/diacríticos.
-        $t = preg_replace('/\p{Mn}/u', '', \Normalizer::isNormalized($t) ? $t : \Normalizer::normalize($t, \Normalizer::FORM_D));
+        // Quita acentos/diacríticos. OJO: Normalizer::isNormalized() sin argumento verifica
+        // la forma NFC (la habitual en texto tipiado), así que un "é" ya viene compuesto y
+        // nunca se descompone si se usa esa condición — hay que normalizar siempre a FORM_D.
+        $t = preg_replace('/\p{Mn}/u', '', \Normalizer::normalize($t, \Normalizer::FORM_D));
         // Todo lo no alfanumérico → espacio.
         $t = preg_replace('/[^a-z0-9áéíóúñ]+/iu', ' ', $t);
+
         return trim(preg_replace('/\s+/', ' ', $t));
     }
 
@@ -106,11 +110,13 @@ class ConvalidacionEngine
             // Números romanos → mayúscula.
             if (in_array($base, self::NUMEROS_ROMANOS, true)) {
                 $salida[] = mb_strtoupper($base, 'UTF-8');
+
                 continue;
             }
             // Siglas conocidas → mayúscula.
             if (in_array(mb_strtoupper($base, 'UTF-8'), self::SIGLAS, true)) {
                 $salida[] = mb_strtoupper($base, 'UTF-8');
+
                 continue;
             }
 
@@ -121,7 +127,7 @@ class ConvalidacionEngine
             // Estilo oración: solo la primera palabra en mayúscula; el resto en minúscula.
             if ($i === 0) {
                 $palabraFinal = mb_strtoupper(mb_substr($palabraFinal, 0, 1, 'UTF-8'), 'UTF-8')
-                    . mb_substr($palabraFinal, 1, null, 'UTF-8');
+                    .mb_substr($palabraFinal, 1, null, 'UTF-8');
             }
 
             $salida[] = $palabraFinal;
@@ -132,7 +138,8 @@ class ConvalidacionEngine
 
     private function quitarAcentos(string $t): string
     {
-        $d = \Normalizer::isNormalized($t) ? \Normalizer::normalize($t, \Normalizer::FORM_D) : $t;
+        $d = \Normalizer::normalize($t, \Normalizer::FORM_D);
+
         return preg_replace('/\p{Mn}/u', '', $d);
     }
 
@@ -143,12 +150,24 @@ class ConvalidacionEngine
             return self::ACENTOS[$w];
         }
         // Sufijos regulares del español académico.
-        if (str_ends_with($w, 'cion'))  return substr($w, 0, -4) . 'ción';
-        if (str_ends_with($w, 'siones')) return substr($w, 0, -6) . 'siones';
-        if (str_ends_with($w, 'sion'))  return substr($w, 0, -4) . 'sión';
-        if (str_ends_with($w, 'logia'))  return substr($w, 0, -5) . 'logía';
-        if (str_ends_with($w, 'grafia')) return substr($w, 0, -6) . 'grafía';
-        if (str_ends_with($w, 'metria')) return substr($w, 0, -6) . 'metría';
+        if (str_ends_with($w, 'cion')) {
+            return substr($w, 0, -4).'ción';
+        }
+        if (str_ends_with($w, 'siones')) {
+            return substr($w, 0, -6).'siones';
+        }
+        if (str_ends_with($w, 'sion')) {
+            return substr($w, 0, -4).'sión';
+        }
+        if (str_ends_with($w, 'logia')) {
+            return substr($w, 0, -5).'logía';
+        }
+        if (str_ends_with($w, 'grafia')) {
+            return substr($w, 0, -6).'grafía';
+        }
+        if (str_ends_with($w, 'metria')) {
+            return substr($w, 0, -6).'metría';
+        }
 
         return $w;
     }
@@ -184,12 +203,13 @@ class ConvalidacionEngine
             return false;
         }
         // Lista base (constante) + lista gestionable en base de datos.
-        $claves = array_merge(self::NO_CONVALIDABLES, \App\Models\CursoNoConvalidable::clavesActivas());
+        $claves = array_merge(self::NO_CONVALIDABLES, CursoNoConvalidable::clavesActivas());
         foreach ($claves as $clave) {
             if ($clave !== '' && str_contains($n, $clave)) {
                 return true;
             }
         }
+
         return false;
     }
 
@@ -208,7 +228,7 @@ class ConvalidacionEngine
     /**
      * Pool de cursos USIL destino, a partir del plan de estudios en BD.
      *
-     * @return array<int,array{id:int,label:string,curso:string,ciclo:int|null,creditos:float,es_electivo:bool,silabo:string}>
+     * @return array<int,array{id:int,codigo:string,label:string,curso:string,ciclo:int|null,creditos:float,es_electivo:bool,silabo:string}>
      */
     public function poolCursosUsil(int $carreraId): array
     {
@@ -241,13 +261,14 @@ class ConvalidacionEngine
                 }
                 $vistos[$label] = true;
                 $items[] = [
-                    'id'          => $curso->id,
-                    'label'       => $label,
-                    'curso'       => $nombre,
-                    'ciclo'       => $ciclo->numero,
-                    'creditos'    => (float) $curso->creditos,
+                    'id' => $curso->id,
+                    'codigo' => $curso->codigo,
+                    'label' => $label,
+                    'curso' => $nombre,
+                    'ciclo' => $ciclo->numero,
+                    'creditos' => (float) $curso->creditos,
                     'es_electivo' => (bool) $curso->es_electivo,
-                    'silabo'      => $curso->silabo_texto ?: $nombre,
+                    'silabo' => $curso->silabo_texto ?: $nombre,
                 ];
             }
         }
@@ -269,6 +290,7 @@ class ConvalidacionEngine
             return 1.0;
         }
         similar_text($a, $b, $pct);
+
         return $pct / 100;
     }
 
@@ -278,7 +300,7 @@ class ConvalidacionEngine
      * @param  array<int,string>  $cursosOrigen  nombres de cursos aprobados de origen
      * @param  array  $pool  salida de poolCursosUsil()
      * @return array<string,array{curso_usil_id:int|null,label:string,confianza:float}>
-     *         mapa nombreOrigen → sugerencia
+     *                                                                                  mapa nombreOrigen → sugerencia
      */
     public function asignacionOptima(array $cursosOrigen, array $pool, float $cutoff = 0.55): array
     {
@@ -317,13 +339,14 @@ class ConvalidacionEngine
         foreach ($cursosOrigen as $origen) {
             if ($this->esNoConvalidable($origen) || ! isset($asignado[$origen])) {
                 $resultado[$origen] = ['curso_usil_id' => null, 'label' => self::NO_CONVALIDAR, 'confianza' => 0.0];
+
                 continue;
             }
             $sel = $asignado[$origen];
             $resultado[$origen] = [
                 'curso_usil_id' => $porLabel[$sel['label']]['id'] ?? null,
-                'label'         => $sel['label'],
-                'confianza'     => round($sel['score'] * 100, 1),
+                'label' => $sel['label'],
+                'confianza' => round($sel['score'] * 100, 1),
             ];
         }
 

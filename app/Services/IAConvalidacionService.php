@@ -92,7 +92,42 @@ SYS;
             'desaprobados' => $data['desaprobados'] ?? [],
         ];
     }
+    // ------------------------------------------------------------------
+    // 1b) Extracción de Malla Oficial
+    // ------------------------------------------------------------------
+    /**
+     * @return array{institucion:array,carrera:array,cursos:array}
+     */
+    public function extraerMallaOficial(string $contenido, string $nombreArchivo): array
+    {
+        if (! $this->disponible()) {
+            throw new \RuntimeException('IA no configurada: define la API key en .env.');
+        }
 
+        $sistema = <<<'SYS'
+Eres un asistente experto en lectura de Mallas Curriculares Oficiales y Planes de Estudio de universidades e institutos.
+Extrae los datos de la institución, la carrera y TODOS los cursos del plan de estudios.
+IMPORTANTE: Esto es un plan de estudios maestro, NO un récord de notas de un alumno. Por lo tanto, NO busques notas ni estado (aprobado/desaprobado).
+Reglas:
+- Captura el nombre EXACTO del curso, el código (si existe), el ciclo/semestre al que pertenece, y los créditos. Deja vacío lo que no veas.
+- Ignora cursos extracurriculares o electivos genéricos si no tienen nombre o código claro, pero prefiere incluir todo lo que sea una materia con créditos.
+Responde SOLO con JSON válido, sin markdown, con la forma:
+{"institucion": {"nombre": "", "pais": ""},
+ "carrera": {"nombre": "", "facultad": "", "grado": ""},
+ "cursos": [{"codigo": "...", "nombre": "...", "ciclo": "...", "creditos": "..."}]}
+SYS;
+
+        $bloque = $this->bloqueArchivo($nombreArchivo, $contenido);
+        $texto = $this->generar($sistema, $bloque, 'Extrae todos los cursos de esta malla oficial y devuelve el JSON pedido.');
+
+        $data = $this->extraerJson($texto);
+
+        return [
+            'institucion' => $data['institucion'] ?? [],
+            'carrera'     => $data['carrera'] ?? [],
+            'cursos'      => $data['cursos'] ?? [],
+        ];
+    }
     // ------------------------------------------------------------------
     // 2) Mapeo semántico origen → USIL (1‑a‑1)
     // ------------------------------------------------------------------

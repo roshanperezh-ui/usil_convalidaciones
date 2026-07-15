@@ -37,7 +37,7 @@ class ImportarMallaExcel implements ShouldQueue
 
         // Lee todas las hojas y elige la de datos (la que tiene la columna 'codigo');
         // así una plantilla con hoja extra de "Instrucciones" no rompe la importación.
-        $hojas = Excel::toCollection(new MallaCursosImport(), Storage::path($carga->archivo));
+        $hojas = Excel::toCollection(new MallaCursosImport, Storage::path($carga->archivo));
         $filas = collect();
         foreach ($hojas as $hoja) {
             if ($hoja->isNotEmpty() && collect($hoja->first())->keys()->contains('codigo')) {
@@ -65,16 +65,22 @@ class ImportarMallaExcel implements ShouldQueue
 
                     $opcional = fn ($k) => isset($fila[$k]) && $fila[$k] !== '' ? (float) $fila[$k] : null;
 
+                    $mencion = isset($fila['mencion']) && trim((string) $fila['mencion']) !== ''
+                        ? trim((string) $fila['mencion'])
+                        : null;
+
                     $ciclo->cursos()->create([
-                        'codigo'         => trim((string) $fila['codigo']),
-                        'nombre'         => trim((string) $fila['nombre']),
-                        'creditos'       => (float) $fila['creditos'],
-                        'horas_teoria'   => $opcional('horas_teoria'),
+                        'codigo' => trim((string) $fila['codigo']),
+                        'nombre' => trim((string) $fila['nombre']),
+                        'creditos' => (float) $fila['creditos'],
+                        'horas_teoria' => $opcional('horas_teoria'),
                         'horas_practica' => $opcional('horas_practica'),
                         // 'caracter' = Electivo / Obligatorio (opcional, por defecto obligatorio).
-                        'es_electivo'    => isset($fila['caracter'])
+                        'es_electivo' => isset($fila['caracter'])
                             ? str_starts_with(mb_strtolower(trim((string) $fila['caracter'])), 'electiv')
                             : false,
+                        // 'mencion' (opcional) = especialidad; vacío = curso del plan regular.
+                        'mencion' => $mencion,
                     ]);
                 });
 
@@ -87,7 +93,7 @@ class ImportarMallaExcel implements ShouldQueue
         }
 
         $carga->update([
-            'estado'          => count($errores) === $filas->count() && $filas->count() > 0 ? 'fallido' : 'completado',
+            'estado' => count($errores) === $filas->count() && $filas->count() > 0 ? 'fallido' : 'completado',
             'detalle_errores' => $errores,
         ]);
 
@@ -117,7 +123,7 @@ class ImportarMallaExcel implements ShouldQueue
     public function failed(Throwable $e): void
     {
         CargaMasiva::where('id', $this->cargaId)->update([
-            'estado'          => 'fallido',
+            'estado' => 'fallido',
             'detalle_errores' => [['linea' => 0, 'mensaje' => $e->getMessage()]],
         ]);
     }
